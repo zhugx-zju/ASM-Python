@@ -161,6 +161,8 @@ save_inverse_results(
     noise_output_dir,
     extra_data={
         "gamma_used": gamma_optimal,
+        "n_iterations": results["n_iterations"],
+        "elapsed_time_total_seconds": elapsed_time_rerun,
         "result_source": "final_rerun_after_lcurve",
         "gamma_selection_method": "lcurve_max_curvature",
         "lcurve_analysis_file": lcurve_save_path.name,

@@ -92,7 +92,17 @@ for noise_level in np.asarray(inverse_config.noise_levels, dtype=float):
 
     noise_output_dir = get_noise_output_dir(output_dir, noise_level)
     print(f"\nSaving results to {noise_output_dir}...")
-    save_inverse_results(results, errors, E_true, noise_level, noise_output_dir)
+    save_inverse_results(
+        results,
+        errors,
+        E_true,
+        noise_level,
+        noise_output_dir,
+        extra_data={
+            "n_iterations": results["n_iterations"],
+            "elapsed_time_total_seconds": elapsed_time,
+        },
+    )
 
     print("Generating visualizations...")
     visualize_inverse_results(
