@@ -237,15 +237,14 @@ def get_body_force_load(mesh_info, bf_vec):
     return np.asarray(mesh_info.M @ bf_vec).ravel()
 
 
-def setup_boundary_conditions(mesh_info, geo_l, geo_h, F_tot):
+def setup_boundary_conditions(mesh_info, geo_l, disp_amp):
     """
     Setup boundary conditions for the FGM plane stress problem.
 
     Args:
         mesh_info: MeshInfo object
         geo_l: Geometry length
-        geo_h: Geometry height
-        F_tot: Total force magnitude
+        disp_amp: Displacement amplitude
 
     Returns:
         bc_info: Dictionary containing boundary conditions
@@ -258,18 +257,16 @@ def setup_boundary_conditions(mesh_info, geo_l, geo_h, F_tot):
     fix_dofs_y = np.array([2 * fix_edge[0] + 1])
     fix_dofs = np.sort(np.concatenate([fix_dofs_x, fix_dofs_y]))
 
-    force = np.zeros(n_dof)
+    disp = np.zeros(n_dof)
+
     load_points = np.where(coord[:, 0] == geo_l)[0]
     load_dofs = 2 * load_points
-
-    F_density = F_tot / geo_h
-    F_mag = F_density * mesh_info.eh
-
-    force[load_dofs] = F_mag
-    force[load_dofs[0]] -= F_mag / 2
-    force[load_dofs[-1]] -= F_mag / 2
+    disp[load_dofs] = disp_amp
+    prescribed_dofs = np.sort(np.unique(np.concatenate([fix_dofs, load_dofs])))
 
     return {
         'fixdof': fix_dofs,
-        'force': force,
+        'prescribed_dof': prescribed_dofs,
+        'load_dofs': load_dofs,
+        'disp': disp,
     }

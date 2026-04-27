@@ -66,9 +66,7 @@ material_info.update(E_vec, iteration=1)
 # Setup boundary conditions
 # ============================================================
 print("\nSetting up boundary conditions...")
-bc_info = setup_boundary_conditions(mesh_info, config.geo_l, config.geo_h, config.f_tot)
-print(f"  Fixed DOFs: {len(bc_info['fixdof'])}")
-print(f"  Total load: {bc_info['force'].sum():.6f}")
+bc_info = setup_boundary_conditions(mesh_info, config.geo_l, config.disp_amp)
 
 
 # ============================================================

@@ -16,7 +16,7 @@ class ForwardConfig:
     geo_h: float
     nel_x: int
     nel_y: int
-    f_tot: float
+    disp_amp: float
     Ex: float
     Ey: float
     nu: float
@@ -91,13 +91,12 @@ def coerce_forward_config(config: ForwardConfig | Mapping[str, object]) -> Forwa
     """Convert a mapping or config-like object to ``ForwardConfig``."""
     if isinstance(config, ForwardConfig):
         return config
-    force_key = "F_tot" if "F_tot" in config else "f_tot"
     return ForwardConfig(
         geo_l=float(config["geo_l"]),
         geo_h=float(config["geo_h"]),
         nel_x=int(config["nel_x"]),
         nel_y=int(config["nel_y"]),
-        f_tot=float(config[force_key]),
+        disp_amp=float(config["disp_amp"]),
         Ex=float(config["Ex"]),
         Ey=float(config["Ey"]),
         nu=float(config["nu"]),

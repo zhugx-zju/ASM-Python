@@ -21,10 +21,12 @@ NEL_X = 39  # Number of elements in x direction
 NEL_Y = 39  # Number of elements in y direction
 
 # Material properties
-F_TOT = 0.01     # Total applied force
 EX = 2.0        # Modulus ratio at x = geo_l
 EY = 0.5        # Modulus ratio at y = geo_h
 NU = 0.3        # Poisson's ratio
+
+# Load condition
+disp_amp = 0.001 * GEO_L     # Prescribed x-displacement on the right edge
 
 # Distribution type: 'bil' (bilinear) or 'exp' (exponential)
 DIS_TYPE = 'bil'
@@ -66,7 +68,7 @@ def get_forward_config():
         geo_h=GEO_H,
         nel_x=NEL_X,
         nel_y=NEL_Y,
-        f_tot=F_TOT,
+        disp_amp=disp_amp,
         Ex=EX,
         Ey=EY,
         nu=NU,

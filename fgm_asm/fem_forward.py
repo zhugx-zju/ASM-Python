@@ -32,9 +32,15 @@ class FEMInfo:
         self.K = None
         self._solve_free = None
 
-        self.fix_dof = np.asarray(bc_info['fixdof'], dtype=np.int32)
+        self.prescribed_dof = np.asarray(bc_info.get('prescribed_dof', bc_info['fixdof']), dtype=np.int32)
+        self.prescribed_values = np.asarray(
+            bc_info.get('disp', np.zeros(mesh_info.n_dof, dtype=float)),
+            dtype=float,
+        )
+
+        self.fix_dof = self.prescribed_dof
         free_mask = np.ones(mesh_info.n_dof, dtype=bool)
-        free_mask[self.fix_dof] = False
+        free_mask[self.prescribed_dof] = False
         self.free_dof = np.flatnonzero(free_mask)
 
 
@@ -120,14 +126,21 @@ def solve_system(fem_info, rhs):
         solution: Solution vector [n_dof]
     """
     solver = _get_free_solver(fem_info)
-    solution = np.zeros(fem_info.mesh_info.n_dof)
-    solution[fem_info.free_dof] = solver(np.asarray(rhs)[fem_info.free_dof])
+    rhs = np.asarray(rhs, dtype=float).ravel()
+    solution = np.array(fem_info.prescribed_values, copy=True)
+
+    rhs_free = rhs[fem_info.free_dof]
+    if fem_info.prescribed_dof.size > 0:
+        coupling = fem_info.K[fem_info.free_dof][:, fem_info.prescribed_dof]
+        rhs_free -= np.asarray(coupling @ fem_info.prescribed_values[fem_info.prescribed_dof]).ravel()
+
+    solution[fem_info.free_dof] = solver(rhs_free)
     return solution
 
 
 def forward_solver(fem_info):
     """
-    Solve the forward FEM problem for displacement.
+    Solve the displacement-controlled forward FEM problem.
 
     Args:
         fem_info: FEMInfo object
@@ -135,12 +148,13 @@ def forward_solver(fem_info):
     Returns:
         U: Displacement vector [n_dof]
     """
-    return solve_system(fem_info, fem_info.bc_info['force'])
+    rhs = np.zeros(fem_info.mesh_info.n_dof, dtype=float)
+    return solve_system(fem_info, rhs)
 
 
 def compute_reaction_forces(fem_info, U):
     """
-    Compute reaction forces at fixed DOFs.
+    Compute reaction forces for the displacement-controlled problem.
 
     Args:
         fem_info: FEMInfo object
@@ -149,4 +163,4 @@ def compute_reaction_forces(fem_info, U):
     Returns:
         RF: Reaction force vector [n_dof]
     """
-    return fem_info.K @ U - fem_info.bc_info['force']
+    return fem_info.K @ U
