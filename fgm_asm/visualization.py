@@ -45,7 +45,7 @@ def _save_figure(fig, save_path, stem, formats=('png', 'pdf'), dpi=1200):
         fig.savefig(save_path / f'{stem}.{ext}', **kwargs)
 
 
-def create_smooth_contour(x, y, z, ax, levels=100, cmap='viridis', colorbar_label=None):
+def create_smooth_contour(x, y, z, ax, levels=100, cmap='viridis', colorbar_label=None, **kwargs):
     """
     Create smooth contour plot using ``pcolormesh`` for better smoothness.
 
@@ -62,7 +62,7 @@ def create_smooth_contour(x, y, z, ax, levels=100, cmap='viridis', colorbar_labe
         Plot object
     """
     del levels, colorbar_label
-    return ax.pcolormesh(x, y, z, cmap=cmap, shading='gouraud')
+    return ax.pcolormesh(x, y, z, cmap=cmap, shading='gouraud', **kwargs)
 
 
 def reshape_nodal_values_for_plot(mesh_info, nodal_values):
@@ -109,6 +109,7 @@ def plot_modulus_distribution(mesh_info, E_field, save_path=None):
     ax.axis('equal')
     ax.axis('off')
     cbar = plt.colorbar(im, ax=ax, fraction=0.0405, pad=0.04)
+    cbar.set_label(r'Modulus $E$', fontsize=12)
     cbar.ax.tick_params(labelsize=12)
 
     plt.tight_layout()
@@ -233,17 +234,36 @@ def plot_reconstruction_results(mesh_info, E_true, E_reconstructed, errors,
         fig: The matplotlib figure
     """
     E_recon_2d = reshape_nodal_values_for_plot(mesh_info, E_reconstructed)
+    e_min = min(np.min(E_true), np.min(E_recon_2d))
+    e_max = max(np.max(E_true), np.max(E_recon_2d))
 
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))
 
-    im1 = create_smooth_contour(mesh_info.plot_x, mesh_info.plot_y, E_true, axes[0], cmap='viridis')
+    im1 = create_smooth_contour(
+        mesh_info.plot_x,
+        mesh_info.plot_y,
+        E_true,
+        axes[0],
+        cmap='viridis',
+        vmin=e_min,
+        vmax=e_max,
+    )
     axes[0].set_title('True Modulus Distribution', fontsize=15, fontweight='bold')
     axes[0].axis('equal')
     axes[0].axis('off')
     cbar1 = plt.colorbar(im1, ax=axes[0], fraction=0.0405, pad=0.04)
+    cbar1.set_label(r'Modulus $E$', fontsize=12)
     cbar1.ax.tick_params(labelsize=11)
 
-    im2 = create_smooth_contour(mesh_info.plot_x, mesh_info.plot_y, E_recon_2d, axes[1], cmap='viridis')
+    im2 = create_smooth_contour(
+        mesh_info.plot_x,
+        mesh_info.plot_y,
+        E_recon_2d,
+        axes[1],
+        cmap='viridis',
+        vmin=e_min,
+        vmax=e_max,
+    )
     axes[1].set_title(
         f'Reconstructed Modulus (Noise: {noise_level*100:.0f}%)',
         fontsize=15,
@@ -252,6 +272,7 @@ def plot_reconstruction_results(mesh_info, E_true, E_reconstructed, errors,
     axes[1].axis('equal')
     axes[1].axis('off')
     cbar2 = plt.colorbar(im2, ax=axes[1], fraction=0.0405, pad=0.04)
+    cbar2.set_label(r'Modulus $E$', fontsize=12)
     cbar2.ax.tick_params(labelsize=11)
 
     error_field = reshape_nodal_values_for_plot(mesh_info, errors['rel_error_field'])
@@ -509,6 +530,12 @@ def plot_reconstruction_comparison(mesh_info, E_true, scan_E_reconstructed,
         ax.axis('equal')
         ax.axis('off')
         cbar = plt.colorbar(im, ax=ax, fraction=0.0405, pad=0.04)
+        if cmap == 'viridis':
+            cbar.set_label(r'Modulus $E$', fontsize=12)
+        elif cmap == 'hot':
+            cbar.set_label('Error (%)', fontsize=12)
+        else:
+            cbar.set_label(r'$\Delta E$', fontsize=12)
         cbar.ax.tick_params(labelsize=11)
 
     fig.suptitle(f'Reconstruction Comparison (Noise: {noise_level*100:.2f}%)',

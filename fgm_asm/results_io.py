@@ -18,6 +18,56 @@ RESULTS_FOLDER_GLOB = "Geo_*_Mesh_*_Alpha_*_Beta_*_Gamma_*"
 LEGACY_FORWARD_DIR = "forward_results"
 LEGACY_INVERSE_DIR = "inverse_results"
 LEGACY_LCURVE_DIR = "inverse_results_lbfgs_lcurve"
+CONFIG_SNAPSHOT_FILENAME = "config.py"
+
+
+def _normalize_python_value(value: Any) -> Any:
+    """Convert runtime values to plain Python literals suitable for repr()."""
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {
+            _normalize_python_value(key): _normalize_python_value(val)
+            for key, val in value.items()
+        }
+    if isinstance(value, tuple):
+        return tuple(_normalize_python_value(item) for item in value)
+    if isinstance(value, list):
+        return [_normalize_python_value(item) for item in value]
+    if isinstance(value, set):
+        return {_normalize_python_value(item) for item in value}
+    if hasattr(value, "item") and callable(getattr(value, "item")):
+        try:
+            return value.item()
+        except (ValueError, TypeError):
+            pass
+    return value
+
+
+def write_python_config_snapshot(output_dir: Path | str,
+                                 sections: list[tuple[str, dict[str, Any]]],
+                                 filename: str = CONFIG_SNAPSHOT_FILENAME) -> Path:
+    """Write a small Python config snapshot for a saved inverse-result folder."""
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    lines = [
+        "# Auto-generated configuration snapshot for this inverse run.",
+        "# Saved together with the inverse results for later inspection.",
+        "",
+    ]
+
+    for title, entries in sections:
+        if not entries:
+            continue
+        lines.append(f"# {title}")
+        for key, value in entries.items():
+            lines.append(f"{key} = {repr(_normalize_python_value(value))}")
+        lines.append("")
+
+    file_path = output_dir / filename
+    file_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    return file_path
 
 
 def format_noise_tag(noise_level: float) -> str:
