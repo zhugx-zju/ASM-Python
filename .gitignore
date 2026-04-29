@@ -27,3 +27,5 @@ results/
 
 # Optional generated figures and logs
 *.log
+joint_inversion_research_plan
+nonlinear_case_inverse_derivation

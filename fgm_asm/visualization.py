@@ -109,7 +109,7 @@ def plot_modulus_distribution(mesh_info, E_field, save_path=None):
     ax.axis('equal')
     ax.axis('off')
     cbar = plt.colorbar(im, ax=ax, fraction=0.0405, pad=0.04)
-    cbar.set_label(r'Modulus $E$', fontsize=12)
+    cbar.set_label(r'Modulus (MPa)', fontsize=12)
     cbar.ax.tick_params(labelsize=12)
 
     plt.tight_layout()
@@ -571,6 +571,7 @@ def visualize_forward_results(mesh_info, E_field, U, config, save_path=None, sho
     axes[0].axis('equal')
     axes[0].axis('off')
     cbar1 = plt.colorbar(im1, ax=axes[0], fraction=0.0405, pad=0.04)
+    cbar1.set_label(r'Modulus (MPa)', fontsize=12)
     cbar1.ax.tick_params(labelsize=11)
 
     im2 = create_smooth_contour(mesh_info.plot_x, mesh_info.plot_y, ux, axes[1], cmap='viridis')
