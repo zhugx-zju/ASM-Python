@@ -353,14 +353,14 @@ def plot_iteration_history(results, save_path=None, noise_level=0.0, filename_st
 
 def plot_gradient_field(mesh_info, results, noise_level=0.0, save_path=None, filename_stem=None):
     """
-    Plot gradient field in one figure with three subplots.
+    Plot raw-parameter gradients in one figure with three subplots.
 
     Uses diverging colormap (RdBu_r) with zero centered at white/light color
     to better visualize positive and negative gradients.
 
     Args:
         mesh_info: MeshInfo object
-        results: Optimization results dictionary
+        results: Optimization results dictionary containing raw-space gradient fields
         noise_level: Noise level used (for filename)
         save_path: Path to save figure (optional)
         filename_stem: Optional output filename stem without extension
@@ -393,7 +393,7 @@ def plot_gradient_field(mesh_info, results, noise_level=0.0, save_path=None, fil
     im1 = axes[0].pcolormesh(
         mesh_info.plot_x, mesh_info.plot_y, grad_total, shading='auto', cmap='RdBu_r', norm=norm_total
     )
-    axes[0].set_title(r'Total Gradient $\nabla J$', fontsize=15, fontweight='bold')
+    axes[0].set_title(r'Total Gradient $\partial J / \partial \mathrm{raw}$', fontsize=15, fontweight='bold')
     axes[0].axis('equal')
     axes[0].axis('off')
     cbar1 = plt.colorbar(im1, ax=axes[0], fraction=0.0405, pad=0.04)
@@ -403,7 +403,7 @@ def plot_gradient_field(mesh_info, results, noise_level=0.0, save_path=None, fil
     im2 = axes[1].pcolormesh(
         mesh_info.plot_x, mesh_info.plot_y, grad_tar, shading='auto', cmap='RdBu_r', norm=norm_tar
     )
-    axes[1].set_title(r'Data Misfit Gradient $\nabla J_{data}$', fontsize=15, fontweight='bold')
+    axes[1].set_title(r'Data Misfit Gradient $\partial J_{data} / \partial \mathrm{raw}$', fontsize=15, fontweight='bold')
     axes[1].axis('equal')
     axes[1].axis('off')
     cbar2 = plt.colorbar(im2, ax=axes[1], fraction=0.0405, pad=0.04)
@@ -413,7 +413,7 @@ def plot_gradient_field(mesh_info, results, noise_level=0.0, save_path=None, fil
     im3 = axes[2].pcolormesh(
         mesh_info.plot_x, mesh_info.plot_y, grad_reg, shading='auto', cmap='RdBu_r', norm=norm_reg
     )
-    axes[2].set_title(r'Regularization Gradient $\nabla J_{reg}$', fontsize=15, fontweight='bold')
+    axes[2].set_title(r'Regularization Gradient $\partial J_{reg} / \partial \mathrm{raw}$', fontsize=15, fontweight='bold')
     axes[2].axis('equal')
     axes[2].axis('off')
     cbar3 = plt.colorbar(im3, ax=axes[2], fraction=0.0405, pad=0.04)

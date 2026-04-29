@@ -7,7 +7,7 @@ Results are saved for later use in inverse problem.
 """
 
 from pathlib import Path
-from fgm_asm import MeshInfo, fem_assemble, forward_solver, generate_fgm_modulus
+from fgm_asm import MeshInfo, fem_assemble, forward_solver, generate_fgm_modulus, compute_tensile_end_force
 from fgm_asm.mesh import setup_boundary_conditions
 from fgm_asm.results_io import save_forward_data
 from fgm_asm.visualization import visualize_forward_results
@@ -77,7 +77,9 @@ fem_info = fem_assemble(mesh_info, material_info, bc_info)
 
 print("Solving forward problem...")
 U = forward_solver(fem_info)
+tensile_end_force = compute_tensile_end_force(fem_info, U)
 print(f"  Max displacement: {U.max():.6e}")
+print(f"  Tensile end force: {tensile_end_force:.6e}")
 
 
 # ============================================================
@@ -101,6 +103,7 @@ results = {
     'bc_info': bc_info,
     'E_field': E_field,
     'U': U,
+    'tensile_end_force': tensile_end_force,
     'material_info': material_info,
     'folder_name': folder_name,  # Save folder name for reference
 }

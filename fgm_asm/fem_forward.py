@@ -114,25 +114,29 @@ def _get_free_solver(fem_info):
     return fem_info._solve_free
 
 
-def solve_system(fem_info, rhs):
+def solve_system(fem_info, rhs, prescribed_values=None):
     """
     Solve a linear system with the current stiffness matrix.
 
     Args:
         fem_info: FEMInfo object
         rhs: Right-hand side vector [n_dof]
+        prescribed_values: Optional override for prescribed DOF values [n_dof]
 
     Returns:
         solution: Solution vector [n_dof]
     """
     solver = _get_free_solver(fem_info)
     rhs = np.asarray(rhs, dtype=float).ravel()
-    solution = np.array(fem_info.prescribed_values, copy=True)
+    if prescribed_values is None:
+        prescribed_values = fem_info.prescribed_values
+    prescribed_values = np.asarray(prescribed_values, dtype=float).ravel()
+    solution = np.array(prescribed_values, copy=True)
 
     rhs_free = rhs[fem_info.free_dof]
     if fem_info.prescribed_dof.size > 0:
         coupling = fem_info.K[fem_info.free_dof][:, fem_info.prescribed_dof]
-        rhs_free -= np.asarray(coupling @ fem_info.prescribed_values[fem_info.prescribed_dof]).ravel()
+        rhs_free -= np.asarray(coupling @ prescribed_values[fem_info.prescribed_dof]).ravel()
 
     solution[fem_info.free_dof] = solver(rhs_free)
     return solution
@@ -164,3 +168,19 @@ def compute_reaction_forces(fem_info, U):
         RF: Reaction force vector [n_dof]
     """
     return fem_info.K @ U
+
+
+def compute_tensile_end_force(fem_info, U):
+    """
+    Compute the resultant x-direction force on the loading edge.
+
+    Args:
+        fem_info: FEMInfo object
+        U: Displacement vector [n_dof]
+
+    Returns:
+        tensile_force: Resultant force on the prescribed loading edge
+    """
+    reaction_forces = compute_reaction_forces(fem_info, U)
+    load_dofs = np.asarray(fem_info.bc_info['load_dofs'], dtype=np.int32)
+    return float(np.sum(reaction_forces[load_dofs]))

@@ -29,11 +29,13 @@ mesh_info = forward_data["mesh_info"]
 bc_info = forward_data["bc_info"]
 U_clean = forward_data["U"]
 E_true = forward_data["E_field"]
+tensile_end_force = float(forward_data["tensile_end_force"])
 forward_config = forward_data["config"]
 
 print(f"  Loaded data from {forward_data_path}")
 print(f"  Mesh: {mesh_info.nel_x} x {mesh_info.nel_y} elements")
 print(f"  Number of nodes: {mesh_info.n_nod}")
+print(f"  Saved tensile-end force: {tensile_end_force:.6e}")
 
 inverse_config = cfg.get_inverse_config()
 
@@ -65,9 +67,9 @@ for noise_level in np.asarray(inverse_config.noise_levels, dtype=float):
         mesh_info=mesh_info,
         bc_info=bc_info,
         U_measured=U_measured,
-        E_init=None,
+        tensile_end_force=tensile_end_force,
+        raw_init=None,
         gamma=inverse_config.gamma,
-        E_min=inverse_config.E_min,
         E_max=inverse_config.E_max,
         max_iter=inverse_config.max_iter,
         ftol=inverse_config.ftol,

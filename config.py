@@ -46,14 +46,14 @@ E_MIN = 0.001       # Minimum modulus bound
 E_MAX = 1000.0      # Maximum modulus bound
 MAX_ITER = 2000     # Maximum iterations
 FTOL = 1e-30         
-GTOL = 1e-12
+GTOL = 1e-14
 
 # Noise levels for testing
 NOISE_LEVELS = 0.0  # 0%, 1%, 3%
 
 # L-curve parameters
-GAMMA_MIN = 1e-10    # Minimum gamma to test
-GAMMA_MAX = 1e-8    # Maximum gamma to test
+GAMMA_MIN = 1e-12    # Minimum gamma to test
+GAMMA_MAX = 1e-10    # Maximum gamma to test
 N_GAMMA = 50       # Number of gamma values to test
 
 

@@ -13,9 +13,9 @@ from .config_types import coerce_forward_config
 from .inverse_solver import lbfgs_inverse_solver_scipy
 
 
-def find_optimal_gamma_lcurve(mesh_info, bc_info, U_measured, config,
+def find_optimal_gamma_lcurve(mesh_info, bc_info, U_measured, tensile_end_force, config,
                                gamma_min=1e-10, gamma_max=1e-4, n_gamma=15,
-                               E_min=0.001, E_max=1000.0, max_iter=2000, ftol=1e-12, gtol=1e-8):
+                               E_max=1000.0, max_iter=2000, ftol=1e-12, gtol=1e-8):
     """
     Use L-curve method to find optimal regularization parameter.
 
@@ -46,8 +46,6 @@ def find_optimal_gamma_lcurve(mesh_info, bc_info, U_measured, config,
         Maximum gamma value to test
     n_gamma : int
         Number of gamma values to test
-    E_min : float
-        Minimum modulus bound
     E_max : float
         Maximum modulus bound
     max_iter : int
@@ -89,8 +87,8 @@ def find_optimal_gamma_lcurve(mesh_info, bc_info, U_measured, config,
     E_solutions = []
     all_results = []
 
-    # Initialize E_current for warm-start continuation
-    E_current = None  # Will be set to E_init or previous solution
+    # Initialize raw_current for warm-start continuation
+    raw_current = None
 
     # Test each gamma value with warm-start continuation
     for i, gamma in enumerate(gamma_values):
@@ -106,9 +104,9 @@ def find_optimal_gamma_lcurve(mesh_info, bc_info, U_measured, config,
             mesh_info=mesh_info,
             bc_info=bc_info,
             U_measured=U_measured,
-            E_init=E_current,  # Use previous solution as initial guess
+            tensile_end_force=tensile_end_force,
+            raw_init=raw_current,
             gamma=gamma,
-            E_min=E_min,
             E_max=E_max,
             max_iter=max_iter,
             ftol=ftol,
@@ -116,8 +114,8 @@ def find_optimal_gamma_lcurve(mesh_info, bc_info, U_measured, config,
             nu=forward_config.nu
         )
 
-        # Update E_current for next iteration (warm-start)
-        E_current = results['E_final'].copy()
+        # Update raw_current for next iteration (warm-start)
+        raw_current = np.array(results['raw_final'], copy=True)
 
         E_opt = results['E_final']
         E_solutions.append(E_opt)

@@ -39,11 +39,13 @@ mesh_info = forward_data["mesh_info"]
 bc_info = forward_data["bc_info"]
 U_clean = forward_data["U"]
 E_true = forward_data["E_field"]
+tensile_end_force = float(forward_data["tensile_end_force"])
 forward_config = forward_data["config"]
 
 print(f"  Loaded data from {forward_data_path}")
 print(f"  Mesh: {mesh_info.nel_x} x {mesh_info.nel_y} elements")
 print(f"  Number of nodes: {mesh_info.n_nod}")
+print(f"  Saved tensile-end force: {tensile_end_force:.6e}")
 
 print(f"\nParameters:")
 print(f"  Noise level: {noise_level*100:.2f}%")
@@ -67,11 +69,11 @@ gamma_optimal, lcurve_results = find_optimal_gamma_lcurve(
     mesh_info=mesh_info,
     bc_info=bc_info,
     U_measured=U_measured,
+    tensile_end_force=tensile_end_force,
     config=forward_config,
     gamma_min=lcurve_config.gamma_min,
     gamma_max=lcurve_config.gamma_max,
     n_gamma=lcurve_config.n_gamma,
-    E_min=lcurve_config.E_min,
     E_max=lcurve_config.E_max,
     max_iter=lcurve_config.max_iter,
     ftol=lcurve_config.ftol,
@@ -94,9 +96,9 @@ results = lbfgs_inverse_solver_scipy(
     mesh_info=mesh_info,
     bc_info=bc_info,
     U_measured=U_measured,
-    E_init=None,
+    tensile_end_force=tensile_end_force,
+    raw_init=None,
     gamma=gamma_optimal,
-    E_min=lcurve_config.E_min,
     E_max=lcurve_config.E_max,
     max_iter=lcurve_config.max_iter,
     ftol=lcurve_config.ftol,

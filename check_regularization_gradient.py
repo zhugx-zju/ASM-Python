@@ -1,268 +1,253 @@
 """
-Check gradient of Tikhonov regularization term.
+Check gradient of the Tikhonov regularization term.
 
-This script verifies that the analytical gradient computed by
-get_tikhonov_gradient() matches the numerical finite difference gradient.
-
-Based on the approach in check_Tik_grad.m
+This script verifies two levels of gradients for the current inverse framework:
+1. The analytical gradient dR/dEhat from get_tikhonov_gradient()
+2. The chained gradient dR/draw after Ehat = exp(raw) / mean(exp(raw))
 """
 
 import numpy as np
-from pathlib import Path
+
 from fgm_asm.mesh import MeshInfo
 from fgm_asm.material import MaterialInfo
 from fgm_asm.regularization import get_tikhonov_regularization, get_tikhonov_gradient
+from fgm_asm.inverse_solver import _raw_to_ehat, _transform_gradient_to_raw
 
 
-def check_single_node_gradient(mesh_info, material_info, node_idx, delta=1e-3):
+def build_material_info(mesh_info, nu=0.3, ex=2.0, ey=4.0):
     """
-    Check gradient at a single node using finite differences.
+    Build a smooth positive test field for gradient checks.
+
+    Args:
+        mesh_info: MeshInfo object
+        nu: Poisson's ratio
+        ex: Target modulus ratio in x direction
+        ey: Target modulus ratio in y direction
+
+    Returns:
+        material_info: MaterialInfo object updated with Ehat field
+        raw_vec: Unconstrained field parameters
+        ehat_vec: Positive normalized field
+    """
+    raw_vec = (
+        np.log(ex) / mesh_info.geo_l * mesh_info.X +
+        np.log(ey) / mesh_info.geo_h * mesh_info.Y
+    )
+    ehat_vec = _raw_to_ehat(raw_vec)
+
+    material_info = MaterialInfo(nu=nu)
+    material_info.update(ehat_vec, iteration=1)
+    return material_info, raw_vec, ehat_vec
+
+
+def evaluate_regularization(mesh_info, nu, raw_vec):
+    """
+    Evaluate the regularization value under the current raw-to-Ehat parameterization.
+
+    Args:
+        mesh_info: MeshInfo object
+        nu: Poisson's ratio
+        raw_vec: Unconstrained field parameters
+
+    Returns:
+        reg_value: Tikhonov regularization value
+    """
+    material_info = MaterialInfo(nu=nu)
+    material_info.update(_raw_to_ehat(raw_vec), iteration=1)
+    return get_tikhonov_regularization(mesh_info, material_info)
+
+
+def check_single_node_gradient_ehat(mesh_info, material_info, node_idx, delta=1e-6):
+    """
+    Check dR/dEhat at a single node using finite differences.
 
     Args:
         mesh_info: MeshInfo object
         material_info: MaterialInfo object
         node_idx: Node index to check
-        delta: Perturbation size for finite differences
+        delta: Perturbation size
 
     Returns:
-        relative_error: Relative error between analytical and numerical gradient
-        grad_analytical: Analytical gradient value at node_idx
-        grad_fd: Finite difference gradient value at node_idx
+        relative_error: Relative error between analytical and finite-difference gradients
+        grad_analytical: Analytical gradient at node_idx
+        grad_fd: Finite-difference gradient at node_idx
     """
-    # Get current modulus distribution
-    E_vec = material_info.get_current_modulus()
-
-    # Compute analytical gradient at all nodes
+    ehat_vec = material_info.get_current_modulus()
     grad_analytical_full = get_tikhonov_gradient(mesh_info, material_info)
-    grad_analytical = grad_analytical_full[node_idx]
+    grad_analytical = float(grad_analytical_full[node_idx])
 
-    # Positive perturbation: E_vec[node_idx] + delta
-    E_test_plus = E_vec.copy()
-    E_test_plus[node_idx] = E_vec[node_idx] + delta
+    ehat_plus = ehat_vec.copy()
+    ehat_plus[node_idx] += delta
+    material_plus = MaterialInfo(nu=material_info.nu)
+    material_plus.update(ehat_plus, iteration=1)
+    reg_plus = get_tikhonov_regularization(mesh_info, material_plus)
 
-    material_info_test = MaterialInfo(nu=material_info.nu,
-                                     dis_type=material_info.dis_type,
-                                     alpha=material_info.alpha,
-                                     beta=material_info.beta)
-    material_info_test.update(E_test_plus, iteration=1)
+    ehat_minus = ehat_vec.copy()
+    ehat_minus[node_idx] -= delta
+    material_minus = MaterialInfo(nu=material_info.nu)
+    material_minus.update(ehat_minus, iteration=1)
+    reg_minus = get_tikhonov_regularization(mesh_info, material_minus)
 
-    Tik_plus = get_tikhonov_regularization(mesh_info, material_info_test)
-
-    # Negative perturbation: E_vec[node_idx] - delta
-    E_test_minus = E_vec.copy()
-    E_test_minus[node_idx] = E_vec[node_idx] - delta
-
-    material_info_test = MaterialInfo(nu=material_info.nu,
-                                     dis_type=material_info.dis_type,
-                                     alpha=material_info.alpha,
-                                     beta=material_info.beta)
-    material_info_test.update(E_test_minus, iteration=1)
-
-    Tik_minus = get_tikhonov_regularization(mesh_info, material_info_test)
-
-    # Finite difference gradient (central difference)
-    grad_fd = (Tik_plus - Tik_minus) / (2.0 * delta)
-
-    # Compute relative error
-    relative_error = abs(grad_fd - grad_analytical) / (abs(grad_analytical) + 1e-10)
-
+    grad_fd = float((reg_plus - reg_minus) / (2.0 * delta))
+    relative_error = abs(grad_fd - grad_analytical) / (abs(grad_analytical) + 1e-12)
     return relative_error, grad_analytical, grad_fd
 
 
-def check_all_nodes_gradient(mesh_info, material_info, delta=1e-3,
-                             sample_nodes=None, verbose=True):
+def check_single_node_gradient_raw(mesh_info, nu, raw_vec, node_idx, delta=1e-6):
     """
-    Check gradient at multiple nodes.
+    Check dR/draw at a single node using finite differences.
 
     Args:
         mesh_info: MeshInfo object
-        material_info: MaterialInfo object
-        delta: Perturbation size for finite differences
-        sample_nodes: List of node indices to check (if None, check random nodes)
-        verbose: Whether to print progress
+        nu: Poisson's ratio
+        raw_vec: Unconstrained field parameters
+        node_idx: Node index to check
+        delta: Perturbation size
 
     Returns:
-        results: Dictionary with error statistics
+        relative_error: Relative error between analytical and finite-difference gradients
+        grad_analytical: Analytical chained gradient at node_idx
+        grad_fd: Finite-difference gradient at node_idx
     """
-    n_nod = mesh_info.n_nod
+    material_info = MaterialInfo(nu=nu)
+    material_info.update(_raw_to_ehat(raw_vec), iteration=1)
 
-    # If sample_nodes not specified, randomly select nodes
-    if sample_nodes is None:
-        n_samples = min(10, n_nod)
-        sample_nodes = np.random.choice(n_nod, size=n_samples, replace=False)
+    grad_ehat = get_tikhonov_gradient(mesh_info, material_info)
+    grad_analytical_full = _transform_gradient_to_raw(raw_vec, grad_ehat)
+    grad_analytical = float(grad_analytical_full[node_idx])
 
-    errors = []
-    grad_analytical_list = []
-    grad_fd_list = []
+    raw_plus = raw_vec.copy()
+    raw_plus[node_idx] += delta
+    reg_plus = evaluate_regularization(mesh_info, nu, raw_plus)
 
-    if verbose:
-        print(f"Checking {len(sample_nodes)} nodes...")
-        print("-" * 70)
+    raw_minus = raw_vec.copy()
+    raw_minus[node_idx] -= delta
+    reg_minus = evaluate_regularization(mesh_info, nu, raw_minus)
 
-    for i, node_idx in enumerate(sample_nodes):
-        rel_error, grad_ana, grad_fd = check_single_node_gradient(
-            mesh_info, material_info, node_idx, delta
-        )
+    grad_fd = float((reg_plus - reg_minus) / (2.0 * delta))
+    relative_error = abs(grad_fd - grad_analytical) / (abs(grad_analytical) + 1e-12)
+    return relative_error, grad_analytical, grad_fd
 
-        errors.append(rel_error)
-        grad_analytical_list.append(grad_ana)
-        grad_fd_list.append(grad_fd)
 
-        if verbose:
-            status = "PASS" if rel_error < 1e-4 else "FAIL"
-            print(f"Node {node_idx:4d}: Rel Error = {rel_error:.6e}  [{status}]")
+def check_directional_gradient_raw(mesh_info, nu, raw_vec, delta=1e-6):
+    """
+    Check the full chained gradient dR/draw using a random directional derivative.
 
-    errors = np.array(errors)
+    Args:
+        mesh_info: MeshInfo object
+        nu: Poisson's ratio
+        raw_vec: Unconstrained field parameters
+        delta: Perturbation size
 
-    results = {
-        'sample_nodes': sample_nodes,
-        'relative_errors': errors,
-        'grad_analytical': np.array(grad_analytical_list),
-        'grad_fd': np.array(grad_fd_list),
-        'max_error': np.max(errors),
-        'mean_error': np.mean(errors),
-        'passed': np.all(errors < 1e-4),
-        'delta': delta
-    }
+    Returns:
+        relative_error: Relative error between analytical and finite-difference derivatives
+        directional_analytical: Analytical directional derivative
+        directional_fd: Finite-difference directional derivative
+    """
+    material_info = MaterialInfo(nu=nu)
+    material_info.update(_raw_to_ehat(raw_vec), iteration=1)
 
-    return results
+    grad_ehat = get_tikhonov_gradient(mesh_info, material_info)
+    grad_raw = _transform_gradient_to_raw(raw_vec, grad_ehat)
+
+    direction = np.random.randn(raw_vec.size)
+    direction /= np.linalg.norm(direction)
+
+    directional_analytical = float(grad_raw @ direction)
+    reg_plus = evaluate_regularization(mesh_info, nu, raw_vec + delta * direction)
+    reg_minus = evaluate_regularization(mesh_info, nu, raw_vec - delta * direction)
+    directional_fd = float((reg_plus - reg_minus) / (2.0 * delta))
+
+    relative_error = abs(directional_fd - directional_analytical) / (abs(directional_analytical) + 1e-12)
+    return relative_error, directional_analytical, directional_fd
 
 
 def main():
-    """Main function to check regularization gradient."""
-
+    """Main function to check regularization gradients."""
     print("=" * 70)
     print("CHECK TIKHONOV REGULARIZATION GRADIENT")
     print("=" * 70)
 
-    # ============================================================
-    # Setup: Geometry & Mesh (matching check_Tik_grad.m)
-    # ============================================================
     print("\n[1] Setting up mesh...")
     geo_l = 9.0
     geo_h = 9.0
     nel_x = 40
     nel_y = 40
-
     mesh_info = MeshInfo(geo_l, geo_h, nel_x, nel_y)
+    mesh_info.get_regularization_matrix()
 
-    print(f"    Domain: {geo_l} × {geo_h}")
-    print(f"    Mesh: {nel_x} × {nel_y} elements")
+    print(f"    Domain: {geo_l} x {geo_h}")
+    print(f"    Mesh: {nel_x} x {nel_y} elements")
     print(f"    Number of nodes: {mesh_info.n_nod}")
 
-    # ============================================================
-    # Initial Material Properties (matching check_Tik_grad.m)
-    # ============================================================
-    print("\n[2] Setting up material properties...")
+    print("\n[2] Building test field under raw -> Ehat parameterization...")
     nu = 0.3
-    E_min = 0.1
-    Ex = 2.0
-    Ey = 4.0
-    dis_type = 'bil'  # 'bil' or 'exp'
+    material_info, raw_vec, ehat_vec = build_material_info(mesh_info, nu=nu)
 
-    # Calculate alpha and beta
-    if dis_type == 'exp':
-        alpha = (Ex - 1.0) / geo_l
-        beta = (Ey - 1.0) / geo_h
-        iter_E_vec = 1.0 + alpha * mesh_info.X + beta * mesh_info.Y
-    else:  # 'bil'
-        alpha = np.log(Ex) / geo_l
-        beta = np.log(Ey) / geo_h
-        iter_E_vec = np.exp(alpha * mesh_info.X + beta * mesh_info.Y)
-
-    # Create MaterialInfo and update
-    material_info = MaterialInfo(nu=nu, dis_type=dis_type, alpha=alpha, beta=beta)
-    material_info.update(iter_E_vec, iteration=1)
-
-    print(f"    Distribution type: {dis_type}")
     print(f"    Poisson's ratio: {nu}")
-    print(f"    Modulus range: [{iter_E_vec.min():.4f}, {iter_E_vec.max():.4f}]")
+    print(f"    Raw field range: [{raw_vec.min():.4f}, {raw_vec.max():.4f}]")
+    print(f"    Ehat range: [{ehat_vec.min():.4f}, {ehat_vec.max():.4f}]")
+    print(f"    Ehat mean: {ehat_vec.mean():.6f}")
 
-    # ============================================================
-    # Check 1: Single Random Node (matching check_Tik_grad.m)
-    # ============================================================
-    print("\n" + "=" * 70)
-    print("[3] Single Node Gradient Check (Random)")
-    print("=" * 70)
-
-    np.random.seed(42)  # For reproducibility
+    np.random.seed(42)
     node_idx = np.random.randint(0, mesh_info.n_nod)
-    delta = 1e-3
+    delta = 1e-6
 
-    print(f"    Random node index: {node_idx}")
-    print(f"    Perturbation size (delta): {delta}")
+    print("\n" + "=" * 70)
+    print("[3] Single Node Gradient Check in Ehat Space")
+    print("=" * 70)
+    print(f"    Node index: {node_idx}")
     print(f"    Node position: ({mesh_info.X[node_idx]:.4f}, {mesh_info.Y[node_idx]:.4f})")
-    print(f"    Modulus at node: {iter_E_vec[node_idx]:.4f}")
+    print(f"    Delta: {delta:.1e}")
 
-    rel_error, grad_ana, grad_fd = check_single_node_gradient(
-        mesh_info, material_info, node_idx, delta
+    rel_ehat, grad_ehat_ana, grad_ehat_fd = check_single_node_gradient_ehat(
+        mesh_info, material_info, node_idx, delta=delta
     )
 
-    print("\n    Results:")
-    print(f"    Analytical gradient: {grad_ana:.8e}")
-    print(f"    Finite diff gradient: {grad_fd:.8e}")
-    print(f"    Absolute difference: {abs(grad_ana - grad_fd):.8e}")
-    print(f"    Relative error: {rel_error:.8e}")
+    print(f"    Analytical dR/dEhat: {grad_ehat_ana:.8e}")
+    print(f"    Finite diff dR/dEhat: {grad_ehat_fd:.8e}")
+    print(f"    Relative error: {rel_ehat:.8e}")
+
+    print("\n" + "=" * 70)
+    print("[4] Single Node Gradient Check in Raw Space")
+    print("=" * 70)
+
+    rel_raw, grad_raw_ana, grad_raw_fd = check_single_node_gradient_raw(
+        mesh_info, nu, raw_vec, node_idx, delta=delta
+    )
+
+    print(f"    Analytical dR/draw: {grad_raw_ana:.8e}")
+    print(f"    Finite diff dR/draw: {grad_raw_fd:.8e}")
+    print(f"    Relative error: {rel_raw:.8e}")
+
+    print("\n" + "=" * 70)
+    print("[5] Directional Gradient Check in Raw Space")
+    print("=" * 70)
+
+    rel_dir, dir_ana, dir_fd = check_directional_gradient_raw(
+        mesh_info, nu, raw_vec, delta=delta
+    )
+
+    print(f"    Analytical directional derivative: {dir_ana:.8e}")
+    print(f"    Finite diff directional derivative: {dir_fd:.8e}")
+    print(f"    Relative error: {rel_dir:.8e}")
 
     threshold = 1e-4
-    if rel_error < threshold:
-        print(f"\n    [PASS] Relative error < {threshold}")
-    else:
-        print(f"\n    [FAIL] Relative error >= {threshold}")
 
-    # ============================================================
-    # Check 2: Multiple Random Nodes
-    # ============================================================
-    print("\n" + "=" * 70)
-    print("[4] Multiple Nodes Gradient Check")
-    print("=" * 70)
-
-    n_samples = 20
-    sample_nodes = np.random.choice(mesh_info.n_nod, size=n_samples, replace=False)
-
-    results = check_all_nodes_gradient(
-        mesh_info, material_info, delta=1e-3,
-        sample_nodes=sample_nodes, verbose=True
-    )
-
-    # ============================================================
-    # Check 3: Different Delta Values
-    # ============================================================
-    print("\n" + "=" * 70)
-    print("[5] Sensitivity to Delta (Perturbation Size)")
-    print("=" * 70)
-
-    deltas = [1e-2, 1e-3, 1e-4, 1e-5, 1e-6]
-
-    print(f"Testing node {node_idx} with different delta values:")
-    print("-" * 70)
-    print(f"{'Delta':>12s}  {'Rel Error':>12s}  {'Status':>8s}")
-    print("-" * 70)
-
-    for d in deltas:
-        rel_err, _, _ = check_single_node_gradient(mesh_info, material_info, node_idx, d)
-        status = "PASS" if rel_err < 1e-4 else "FAIL"
-        print(f"{d:12.2e}  {rel_err:12.6e}  {status:>8s}")
-
-    # ============================================================
-    # Summary
-    # ============================================================
     print("\n" + "=" * 70)
     print("SUMMARY")
     print("=" * 70)
-    print(f"Single node check: {'[PASS]' if rel_error < threshold else '[FAIL]'}")
-    print(f"Multiple nodes check: {'[PASS]' if results['passed'] else '[FAIL]'}")
-    print(f"  - Nodes tested: {len(results['sample_nodes'])}")
-    print(f"  - Max relative error: {results['max_error']:.6e}")
-    print(f"  - Mean relative error: {results['mean_error']:.6e}")
-    print(f"  - Threshold: {threshold:.2e}")
+    print(f"Ehat-space node check: {'[PASS]' if rel_ehat < threshold else '[FAIL]'}")
+    print(f"Raw-space node check: {'[PASS]' if rel_raw < threshold else '[FAIL]'}")
+    print(f"Raw-space directional check: {'[PASS]' if rel_dir < threshold else '[FAIL]'}")
+    print(f"Threshold: {threshold:.2e}")
 
-    if results['passed']:
+    if rel_ehat < threshold and rel_raw < threshold and rel_dir < threshold:
         print("\n*** All gradient checks PASSED! ***")
-        print("The analytical gradient implementation is correct.")
+        print("The regularization gradient and chain-rule transformation are consistent.")
     else:
         print("\n*** WARNING: Some gradient checks FAILED! ***")
-        print("Please review the gradient implementation in regularization.py")
+        print("Please review regularization.py or the raw-to-Ehat gradient transformation.")
 
     print("=" * 70)
 
