@@ -33,8 +33,9 @@ See [docs/branch_scope.md](docs/branch_scope.md) for the lightweight branch rule
 - Elements: 4-node bilinear quadrilateral elements
 - Integration: 2x2 Gauss quadrature
 - Material field: nodal Young's modulus with either bilinear or exponential spatial variation
-- Boundary conditions: left edge constrained, distributed load applied on the right edge
-- Inverse objective: displacement misfit plus Tikhonov smoothness regularization on the modulus field
+- Boundary conditions: left edge constrained, prescribed x-displacement applied on the right edge
+- Forward output: displacement field together with the recovered tensile-end reaction force on the loading edge
+- Inverse objective: displacement misfit plus Tikhonov smoothness regularization on the normalized modulus field
 
 ## Dependencies
 
@@ -56,11 +57,11 @@ The main defaults are defined in `config.py`, which now returns typed configurat
 
 - geometry: `9.0 x 9.0`
 - mesh: `39 x 39`
-- total load: `0.01`
+- prescribed right-edge x-displacement: `0.001 * GEO_L`
 - Poisson ratio: `0.3`
 - modulus targets: `Ex = 2.0`, `Ey = 0.5`
 - distribution type: `bil`
-- default regularization parameter: `1e-6`
+- default regularization parameter for the fixed-gamma workflow: `1e-6`
 
 ## Typical Workflow
 
@@ -206,6 +207,11 @@ This is the most complete end-to-end inverse workflow in the current repository:
 - saves both the L-curve scan data and the final rerun result
 - stores the scan-optimal solution inside `inverse_results.pkl` so it can be compared with the final rerun
 
+In the current `disp_linear` branch, the optimization variables are unconstrained nodal parameters
+`raw`, which are mapped to a positive normalized modulus field
+`Ehat = exp(raw) / mean(exp(raw))`. The absolute modulus scale is not optimized directly; it is
+recovered afterward from the measured tensile-end reaction force.
+
 ### `inverse_main.py`
 
 This script uses the same SciPy L-BFGS-B implementation as the L-curve workflow, but with a fixed user-specified `gamma`.
@@ -236,9 +242,17 @@ The comparison plot is useful when you want to see whether warm-start continuati
 - `setup_boundary_conditions` now lives in `fgm_asm/mesh.py`.
 - `forward_job.py` saves figures without blocking on an interactive Matplotlib window.
 - `inverse_l_curve.py` processes one noise value per run. If `config.py` provides multiple values, the script currently uses the first one.
+- In the current displacement-controlled inverse workflow, the adjoint problem uses homogeneous Dirichlet conditions on prescribed-displacement DOFs rather than reusing the forward loading values.
 - Plotting scripts rely on saved pickle files rather than rerunning the solver.
 - Result files are stored as Python pickle objects, which is convenient for internal reuse but not intended as a stable interchange format.
 - For research branching, keep each branch's scope, output layout, and validation notes documented even if the code stays largely independent.
+
+## disp_linear Branch Notes
+
+- Loading mode: displacement-controlled linear elasticity under small strain.
+- Forward runs save both the displacement field and the tensile-end reaction force needed by the inverse workflow.
+- The inverse solver reconstructs the normalized shape of the modulus field first and then recovers the global modulus scale from the saved reaction-force target.
+- `inverse_results.pkl` produced by `inverse_l_curve.py` contains both the final rerun result and the scan-optimal solution so the two can be compared afterward.
 
 ## Suggested Starting Point
 

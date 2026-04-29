@@ -10,7 +10,7 @@ import time
 import numpy as np
 
 from fgm_asm import lbfgs_inverse_solver_scipy
-from fgm_asm.results_io import get_noise_output_dir, save_inverse_results
+from fgm_asm.results_io import get_noise_output_dir, save_inverse_results, write_python_config_snapshot
 from fgm_asm.utils import add_noise_to_displacement, compute_errors
 from fgm_asm.visualization import visualize_inverse_results
 from fgm_asm.workflows import load_latest_forward_problem, resolve_results_dir
@@ -105,6 +105,56 @@ for noise_level in np.asarray(inverse_config.noise_levels, dtype=float):
             "elapsed_time_total_seconds": elapsed_time,
         },
     )
+    config_snapshot_path = write_python_config_snapshot(
+        noise_output_dir,
+        [
+            (
+                "Run Metadata",
+                {
+                    "WORKFLOW": "inverse_main",
+                    "FORWARD_DATA_PATH": str(forward_data_path),
+                    "RESULTS_DIR": str(output_dir),
+                    "NOISE_OUTPUT_DIR": str(noise_output_dir),
+                    "NOISE_LEVEL": float(noise_level),
+                    "TRUE_TENSILE_END_FORCE": float(tensile_end_force),
+                    "RECONSTRUCTED_TENSILE_END_FORCE": float(results["alpha_final"] * results["force_unit_final"]),
+                    "GAMMA_USED": float(inverse_config.gamma),
+                    "RESULT_SOURCE": "fixed_gamma_inverse_main",
+                    "CONVERGED": bool(results["converged"]),
+                    "MESSAGE": str(results["message"]),
+                    "N_ITERATIONS": int(results["n_iterations"]),
+                    "ELAPSED_TIME_TOTAL_SECONDS": float(elapsed_time),
+                },
+            ),
+            (
+                "Forward Configuration",
+                {
+                    "GEO_L": forward_config.geo_l,
+                    "GEO_H": forward_config.geo_h,
+                    "NEL_X": forward_config.nel_x,
+                    "NEL_Y": forward_config.nel_y,
+                    "disp_amp": forward_config.disp_amp,
+                    "EX": forward_config.Ex,
+                    "EY": forward_config.Ey,
+                    "NU": forward_config.nu,
+                    "DIS_TYPE": forward_config.dis_type,
+                },
+            ),
+            (
+                "Inverse Configuration",
+                {
+                    "GAMMA": inverse_config.gamma,
+                    "E_MIN": inverse_config.E_min,
+                    "E_MAX": inverse_config.E_max,
+                    "MAX_ITER": inverse_config.max_iter,
+                    "FTOL": inverse_config.ftol,
+                    "GTOL": inverse_config.gtol,
+                    "NOISE_LEVELS": inverse_config.noise_levels,
+                },
+            ),
+        ],
+    )
+    print(f"  Config snapshot saved to {config_snapshot_path}")
 
     print("Generating visualizations...")
     visualize_inverse_results(
