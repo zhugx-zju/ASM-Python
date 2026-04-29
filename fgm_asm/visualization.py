@@ -252,7 +252,7 @@ def plot_reconstruction_results(mesh_info, E_true, E_reconstructed, errors,
     axes[0].axis('equal')
     axes[0].axis('off')
     cbar1 = plt.colorbar(im1, ax=axes[0], fraction=0.0405, pad=0.04)
-    cbar1.set_label(r'Modulus $E$', fontsize=12)
+    cbar1.set_label(r'Modulus (MPa)', fontsize=12)
     cbar1.ax.tick_params(labelsize=11)
 
     im2 = create_smooth_contour(
@@ -272,7 +272,7 @@ def plot_reconstruction_results(mesh_info, E_true, E_reconstructed, errors,
     axes[1].axis('equal')
     axes[1].axis('off')
     cbar2 = plt.colorbar(im2, ax=axes[1], fraction=0.0405, pad=0.04)
-    cbar2.set_label(r'Modulus $E$', fontsize=12)
+    cbar2.set_label(r'Modulus (MPa)', fontsize=12)
     cbar2.ax.tick_params(labelsize=11)
 
     error_field = reshape_nodal_values_for_plot(mesh_info, errors['rel_error_field'])
