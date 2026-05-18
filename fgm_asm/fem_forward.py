@@ -1,0 +1,186 @@
+"""
+Forward FEM solver for FGM plane stress problems.
+"""
+
+import numpy as np
+from scipy.sparse import csr_matrix
+from scipy.sparse.linalg import factorized
+
+
+class FEMInfo:
+    """
+    Finite element information storage.
+    """
+
+    def __init__(self, mesh_info, material_info, bc_info):
+        """
+        Initialize FEM information.
+
+        Args:
+            mesh_info: MeshInfo object
+            material_info: MaterialInfo object
+            bc_info: Boundary condition dictionary
+        """
+        self.mesh_info = mesh_info
+        self.material_info = material_info
+        self.bc_info = bc_info
+
+        self.B_gauss = mesh_info.B_gauss
+        self.det_j_gauss = mesh_info.gauss_det_j
+        self.D0 = None
+
+        self.K = None
+        self._solve_free = None
+
+        self.prescribed_dof = np.asarray(bc_info.get('prescribed_dof', bc_info['fixdof']), dtype=np.int32)
+        self.prescribed_values = np.asarray(
+            bc_info.get('disp', np.zeros(mesh_info.n_dof, dtype=float)),
+            dtype=float,
+        )
+
+        self.fix_dof = self.prescribed_dof
+        free_mask = np.ones(mesh_info.n_dof, dtype=bool)
+        free_mask[self.prescribed_dof] = False
+        self.free_dof = np.flatnonzero(free_mask)
+
+
+def _get_gauss_modulus(mesh_info, material_info):
+    """Interpolate the nodal modulus field to the Gauss points."""
+    E_vec = material_info.get_current_modulus()
+    G_ele = E_vec[mesh_info.ele_nods_id - 1]
+    return (G_ele @ mesh_info.gauss_N.T).T
+
+
+def get_fgm_ke(mesh_info, material_info, D0):
+    """
+    Calculate element stiffness matrices for all elements.
+
+    Args:
+        mesh_info: MeshInfo object
+        material_info: MaterialInfo object
+        D0: Base elasticity matrix [3, 3]
+
+    Returns:
+        ke: Element stiffness matrices [n_el, 8, 8]
+    """
+    E_gauss = _get_gauss_modulus(mesh_info, material_info)
+    weights = E_gauss * mesh_info.gauss_det_j * mesh_info.gauss_w[:, None]
+    return np.einsum('geia,ij,gejb,ge->eab', mesh_info.B_gauss, D0, mesh_info.B_gauss, weights)
+
+
+def assemble_global_stiffness(mesh_info, ke):
+    """
+    Assemble the global stiffness matrix from element stiffness blocks.
+
+    Args:
+        mesh_info: MeshInfo object
+        ke: Element stiffness matrices [n_el, 8, 8]
+
+    Returns:
+        K: Global stiffness matrix [n_dof, n_dof]
+    """
+    K = csr_matrix(
+        (ke.ravel(), (mesh_info.global_row_idx.ravel(), mesh_info.global_col_idx.ravel())),
+        shape=(mesh_info.n_dof, mesh_info.n_dof),
+    )
+    K.sum_duplicates()
+    return K.tocsr()
+
+
+def fem_assemble(mesh_info, material_info, bc_info):
+    """
+    Assemble FEM system information for the current modulus field.
+
+    Args:
+        mesh_info: MeshInfo object
+        material_info: MaterialInfo object
+        bc_info: Boundary condition dictionary
+
+    Returns:
+        fem_info: FEMInfo object with assembled matrices
+    """
+    fem_info = FEMInfo(mesh_info, material_info, bc_info)
+    fem_info.D0 = material_info.get_elasticity_matrix()
+    ke = get_fgm_ke(mesh_info, material_info, fem_info.D0)
+    fem_info.K = assemble_global_stiffness(mesh_info, ke)
+    return fem_info
+
+
+def _get_free_solver(fem_info):
+    """Return the cached sparse solve callable for the free DOFs."""
+    if fem_info._solve_free is None:
+        K_free = fem_info.K[fem_info.free_dof][:, fem_info.free_dof].tocsc()
+        fem_info._solve_free = factorized(K_free)
+    return fem_info._solve_free
+
+
+def solve_system(fem_info, rhs, prescribed_values=None):
+    """
+    Solve a linear system with the current stiffness matrix.
+
+    Args:
+        fem_info: FEMInfo object
+        rhs: Right-hand side vector [n_dof]
+        prescribed_values: Optional override for prescribed DOF values [n_dof]
+
+    Returns:
+        solution: Solution vector [n_dof]
+    """
+    solver = _get_free_solver(fem_info)
+    rhs = np.asarray(rhs, dtype=float).ravel()
+    if prescribed_values is None:
+        prescribed_values = fem_info.prescribed_values
+    prescribed_values = np.asarray(prescribed_values, dtype=float).ravel()
+    solution = np.array(prescribed_values, copy=True)
+
+    rhs_free = rhs[fem_info.free_dof]
+    if fem_info.prescribed_dof.size > 0:
+        coupling = fem_info.K[fem_info.free_dof][:, fem_info.prescribed_dof]
+        rhs_free -= np.asarray(coupling @ prescribed_values[fem_info.prescribed_dof]).ravel()
+
+    solution[fem_info.free_dof] = solver(rhs_free)
+    return solution
+
+
+def forward_solver(fem_info):
+    """
+    Solve the displacement-controlled forward FEM problem.
+
+    Args:
+        fem_info: FEMInfo object
+
+    Returns:
+        U: Displacement vector [n_dof]
+    """
+    rhs = np.zeros(fem_info.mesh_info.n_dof, dtype=float)
+    return solve_system(fem_info, rhs)
+
+
+def compute_reaction_forces(fem_info, U):
+    """
+    Compute reaction forces for the displacement-controlled problem.
+
+    Args:
+        fem_info: FEMInfo object
+        U: Displacement vector [n_dof]
+
+    Returns:
+        RF: Reaction force vector [n_dof]
+    """
+    return fem_info.K @ U
+
+
+def compute_tensile_end_force(fem_info, U):
+    """
+    Compute the resultant x-direction force on the loading edge.
+
+    Args:
+        fem_info: FEMInfo object
+        U: Displacement vector [n_dof]
+
+    Returns:
+        tensile_force: Resultant force on the prescribed loading edge
+    """
+    reaction_forces = compute_reaction_forces(fem_info, U)
+    load_dofs = np.asarray(fem_info.bc_info['load_dofs'], dtype=np.int32)
+    return float(np.sum(reaction_forces[load_dofs]))
