@@ -45,6 +45,8 @@ print(f"  Modulus bounds: [{inverse_config.E_min}, {inverse_config.E_max}]")
 print(f"  Max iterations: {inverse_config.max_iter}")
 print(f"  ftol: {inverse_config.ftol:.2e}")
 print(f"  gtol: {inverse_config.gtol:.2e}")
+print(f"  Hessian analysis: {inverse_config.enable_hessian_analysis}")
+print(f"  Hessian analysis interval: {inverse_config.hessian_analysis_every}")
 
 output_dir = resolve_results_dir(forward_data_path, forward_data)
 print(f"\nResults will be saved to: {output_dir}")
@@ -75,6 +77,11 @@ for noise_level in np.asarray(inverse_config.noise_levels, dtype=float):
         ftol=inverse_config.ftol,
         gtol=inverse_config.gtol,
         nu=forward_config.nu,
+        enable_hessian_analysis=inverse_config.enable_hessian_analysis,
+        hessian_analysis_every=inverse_config.hessian_analysis_every,
+        hessian_n_eigs=inverse_config.hessian_n_eigs,
+        kernel_probe_count=inverse_config.kernel_probe_count,
+        analysis_tol=inverse_config.analysis_tol,
     )
 
     elapsed_time = time.time() - start_time
@@ -91,6 +98,13 @@ for noise_level in np.asarray(inverse_config.noise_levels, dtype=float):
     print(f"  MAE: {errors['mae']:.4f}%")
     print(f"  Max error: {errors['max_error']:.4f}%")
     print(f"  RMSE: {errors['rmse']:.4f}")
+    diagnostics = results.get("final_hessian_diagnostics")
+    if diagnostics is not None:
+        print(f"  Hessian lambda_min: {diagnostics['lambda_min']:.6e}")
+        print(f"  Hessian lambda_max: {diagnostics['lambda_max']:.6e}")
+        print(f"  Hessian cond: {diagnostics['condition_number']:.6e}")
+        print(f"  Hessian near-nullspace detected: {diagnostics['near_nullspace_detected']}")
+        print(f"  Hessian negative curvature detected: {diagnostics['has_negative_curvature']}")
 
     noise_output_dir = get_noise_output_dir(output_dir, noise_level)
     print(f"\nSaving results to {noise_output_dir}...")
@@ -150,6 +164,21 @@ for noise_level in np.asarray(inverse_config.noise_levels, dtype=float):
                     "FTOL": inverse_config.ftol,
                     "GTOL": inverse_config.gtol,
                     "NOISE_LEVELS": inverse_config.noise_levels,
+                    "ENABLE_HESSIAN_ANALYSIS": inverse_config.enable_hessian_analysis,
+                    "HESSIAN_ANALYSIS_EVERY": inverse_config.hessian_analysis_every,
+                    "HESSIAN_N_EIGS": inverse_config.hessian_n_eigs,
+                    "KERNEL_PROBE_COUNT": inverse_config.kernel_probe_count,
+                    "ANALYSIS_TOL": inverse_config.analysis_tol,
+                },
+            ),
+            (
+                "Ill-Posedness Diagnostics",
+                {
+                    "HESSIAN_LAMBDA_MIN": None if diagnostics is None else float(diagnostics["lambda_min"]),
+                    "HESSIAN_LAMBDA_MAX": None if diagnostics is None else float(diagnostics["lambda_max"]),
+                    "HESSIAN_CONDITION_NUMBER": None if diagnostics is None else float(diagnostics["condition_number"]),
+                    "HESSIAN_NEAR_NULLSPACE_DETECTED": None if diagnostics is None else bool(diagnostics["near_nullspace_detected"]),
+                    "HESSIAN_NEGATIVE_CURVATURE_DETECTED": None if diagnostics is None else bool(diagnostics["has_negative_curvature"]),
                 },
             ),
         ],

@@ -28,6 +28,7 @@ from .utils import (
 from .visualization import (
     plot_displacement_fields,
     plot_gradient_field,
+    plot_hessian_spectrum,
     plot_modulus_distribution,
     plot_reconstruction_comparison,
     plot_reconstruction_results,
@@ -68,6 +69,7 @@ __all__ = [
     # Visualization
     'plot_displacement_fields',
     'plot_gradient_field',
+    'plot_hessian_spectrum',
     'plot_modulus_distribution',
     'plot_reconstruction_comparison',
     'plot_reconstruction_results',
@@ -76,4 +78,3 @@ __all__ = [
     'visualize_forward_results',
     'visualize_inverse_results',
 ]
-

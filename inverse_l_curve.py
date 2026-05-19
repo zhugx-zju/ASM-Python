@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 from fgm_asm import find_optimal_gamma_lcurve, plot_lcurve_results, lbfgs_inverse_solver_scipy
 from fgm_asm.visualization import (
     plot_gradient_field,
+    plot_hessian_spectrum,
     plot_iteration_history,
     plot_reconstruction_comparison,
     plot_reconstruction_results,
@@ -57,6 +58,8 @@ print(f"  Noise level: {noise_level*100:.2f}%")
 print(f"  Modulus bounds: [{lcurve_config.E_min}, {lcurve_config.E_max}]")
 print(f"  Max iterations: {lcurve_config.max_iter}")
 print(f"  ftol: {lcurve_config.ftol:.2e}, gtol: {lcurve_config.gtol:.2e}")
+print(f"  Hessian analysis: {lcurve_config.enable_hessian_analysis}")
+print(f"  Hessian analysis interval: {lcurve_config.hessian_analysis_every}")
 
 output_dir = resolve_results_dir(forward_data_path, forward_data)
 noise_output_dir = get_noise_output_dir(output_dir, noise_level)
@@ -83,9 +86,15 @@ gamma_optimal, lcurve_results = find_optimal_gamma_lcurve(
     max_iter=lcurve_config.max_iter,
     ftol=lcurve_config.ftol,
     gtol=lcurve_config.gtol,
+    enable_hessian_analysis=False,
+    hessian_analysis_every=0,
+    hessian_n_eigs=lcurve_config.hessian_n_eigs,
+    kernel_probe_count=lcurve_config.kernel_probe_count,
+    analysis_tol=lcurve_config.analysis_tol,
 )
 elapsed_time_lcurve = time.time() - start_time_lcurve
 print(f"\nL-curve analysis completed in {elapsed_time_lcurve:.2f} seconds")
+print("  Reduced-Hessian diagnostics were skipped during the gamma scan.")
 
 optimal_idx = lcurve_results["optimal_idx"]
 scan_results = lcurve_results["all_results"][optimal_idx]
@@ -109,6 +118,11 @@ results = lbfgs_inverse_solver_scipy(
     ftol=lcurve_config.ftol,
     gtol=lcurve_config.gtol,
     nu=forward_config.nu,
+    enable_hessian_analysis=lcurve_config.enable_hessian_analysis,
+    hessian_analysis_every=lcurve_config.hessian_analysis_every,
+    hessian_n_eigs=lcurve_config.hessian_n_eigs,
+    kernel_probe_count=lcurve_config.kernel_probe_count,
+    analysis_tol=lcurve_config.analysis_tol,
 )
 elapsed_time_rerun = time.time() - start_time_rerun
 E_reconstructed = results["E_final"]
@@ -133,6 +147,13 @@ print(f"  Converged: {results['converged']}")
 print(f"  Iterations: {results['n_iterations']}")
 print(f"  Final cost: {results['final_cost']:.6e}")
 print(f"  Message: {results['message']}")
+diagnostics = results.get("final_hessian_diagnostics")
+if diagnostics is not None:
+    print(f"  Hessian lambda_min: {diagnostics['lambda_min']:.6e}")
+    print(f"  Hessian lambda_max: {diagnostics['lambda_max']:.6e}")
+    print(f"  Hessian cond: {diagnostics['condition_number']:.6e}")
+    print(f"  Hessian near-nullspace detected: {diagnostics['near_nullspace_detected']}")
+    print(f"  Hessian negative curvature detected: {diagnostics['has_negative_curvature']}")
 print(f"\nReconstruction Errors:")
 print(f"  MAE: {errors['mae']:.4f}%")
 print(f"  Max error: {errors['max_error']:.4f}%")
@@ -235,6 +256,11 @@ config_snapshot_path = write_python_config_snapshot(
                 "FTOL": inverse_config.ftol,
                 "GTOL": inverse_config.gtol,
                 "NOISE_LEVELS": inverse_config.noise_levels,
+                "ENABLE_HESSIAN_ANALYSIS": inverse_config.enable_hessian_analysis,
+                "HESSIAN_ANALYSIS_EVERY": inverse_config.hessian_analysis_every,
+                "HESSIAN_N_EIGS": inverse_config.hessian_n_eigs,
+                "KERNEL_PROBE_COUNT": inverse_config.kernel_probe_count,
+                "ANALYSIS_TOL": inverse_config.analysis_tol,
             },
         ),
         (
@@ -243,6 +269,21 @@ config_snapshot_path = write_python_config_snapshot(
                 "GAMMA_MIN": lcurve_config.gamma_min,
                 "GAMMA_MAX": lcurve_config.gamma_max,
                 "N_GAMMA": lcurve_config.n_gamma,
+                "ENABLE_HESSIAN_ANALYSIS": lcurve_config.enable_hessian_analysis,
+                "HESSIAN_ANALYSIS_EVERY": lcurve_config.hessian_analysis_every,
+                "HESSIAN_N_EIGS": lcurve_config.hessian_n_eigs,
+                "KERNEL_PROBE_COUNT": lcurve_config.kernel_probe_count,
+                "ANALYSIS_TOL": lcurve_config.analysis_tol,
+            },
+        ),
+        (
+            "Ill-Posedness Diagnostics",
+            {
+                "HESSIAN_LAMBDA_MIN": None if diagnostics is None else float(diagnostics["lambda_min"]),
+                "HESSIAN_LAMBDA_MAX": None if diagnostics is None else float(diagnostics["lambda_max"]),
+                "HESSIAN_CONDITION_NUMBER": None if diagnostics is None else float(diagnostics["condition_number"]),
+                "HESSIAN_NEAR_NULLSPACE_DETECTED": None if diagnostics is None else bool(diagnostics["near_nullspace_detected"]),
+                "HESSIAN_NEGATIVE_CURVATURE_DETECTED": None if diagnostics is None else bool(diagnostics["has_negative_curvature"]),
             },
         ),
     ],
@@ -275,6 +316,11 @@ plot_gradient_field(
     noise_level=noise_level,
     save_path=noise_output_dir,
     filename_stem="gradient_field",
+)
+plot_hessian_spectrum(
+    results,
+    save_path=noise_output_dir,
+    filename_stem="hessian_spectrum",
 )
 
 print("  Plotting scan-vs-rerun comparison...")

@@ -59,6 +59,17 @@ if comparison_summary is not None:
     print(f"  Scan MAE: {comparison_summary['scan_mae']:.2f}%")
     print(f"  Rerun-vs-scan rel. L2: {comparison_summary['modulus_diff_rel_l2']:.6e}")
 
+diagnostics = results.get('final_hessian_diagnostics')
+if diagnostics is not None:
+    print("  Reduced-Hessian diagnostics:")
+    print(f"    lambda_min: {diagnostics['lambda_min']:.6e}")
+    print(f"    lambda_max: {diagnostics['lambda_max']:.6e}")
+    print(f"    condition number: {diagnostics['condition_number']:.6e}")
+    print(f"    near-nullspace detected: {diagnostics['near_nullspace_detected']}")
+    print(f"    negative curvature detected: {diagnostics['has_negative_curvature']}")
+else:
+    print("  Reduced-Hessian diagnostics: not available in saved results")
+
 # Generate plots
 print("\nGenerating plots...")
 

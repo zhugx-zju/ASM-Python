@@ -48,11 +48,18 @@ MAX_ITER = 2000     # Maximum iterations
 FTOL = 1e-30         
 GTOL = 1e-14
 
+# Reduced-Hessian analysis parameters
+ENABLE_HESSIAN_ANALYSIS = True
+HESSIAN_ANALYSIS_EVERY = 0   # 0 means only analyze the final iterate
+HESSIAN_N_EIGS = 6
+KERNEL_PROBE_COUNT = 3
+ANALYSIS_TOL = 1e-10
+
 # Noise levels for testing
 NOISE_LEVELS = 0.0  # 0%, 1%, 3%
 
 # L-curve parameters
-GAMMA_MIN = 1e-12    # Minimum gamma to test
+GAMMA_MIN = 1e-14    # Minimum gamma to test
 GAMMA_MAX = 1e-10    # Maximum gamma to test
 N_GAMMA = 50       # Number of gamma values to test
 
@@ -87,6 +94,11 @@ def get_inverse_config():
         gtol=GTOL,
         noise_levels=normalize_noise_levels(NOISE_LEVELS),
         nu=NU,
+        enable_hessian_analysis=ENABLE_HESSIAN_ANALYSIS,
+        hessian_analysis_every=HESSIAN_ANALYSIS_EVERY,
+        hessian_n_eigs=HESSIAN_N_EIGS,
+        kernel_probe_count=KERNEL_PROBE_COUNT,
+        analysis_tol=ANALYSIS_TOL,
     )
 
 
@@ -102,6 +114,11 @@ def get_lcurve_config():
         ftol=FTOL,
         gtol=GTOL,
         nu=NU,
+        enable_hessian_analysis=ENABLE_HESSIAN_ANALYSIS,
+        hessian_analysis_every=HESSIAN_ANALYSIS_EVERY,
+        hessian_n_eigs=HESSIAN_N_EIGS,
+        kernel_probe_count=KERNEL_PROBE_COUNT,
+        analysis_tol=ANALYSIS_TOL,
     )
 
 

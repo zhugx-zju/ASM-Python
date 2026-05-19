@@ -315,10 +315,13 @@ def plot_iteration_history(results, save_path=None, noise_level=0.0, filename_st
 
     iterations = np.arange(len(results['cost_history']))
     cond_h_history = results.get('cond_H_history')
+    lambda_min_history = results.get('lambda_min_history')
     if cond_h_history is None:
-        cond_h_history = np.ones(len(results['grad_norm_history']))
+        cond_h_history = np.full(len(results['grad_norm_history']), np.nan)
     else:
         cond_h_history = np.asarray(cond_h_history)
+    if lambda_min_history is not None:
+        lambda_min_history = np.asarray(lambda_min_history)
 
     axes[0].semilogy(iterations, results['cost_history'], 'b-', linewidth=2.5, label='Total Cost')
     axes[0].semilogy(iterations, results['cost_tar_history'], 'r--', linewidth=2, label='Data Misfit')
@@ -337,10 +340,23 @@ def plot_iteration_history(results, save_path=None, noise_level=0.0, filename_st
     axes[1].grid(True, alpha=0.3, linestyle='--')
     axes[1].tick_params(labelsize=11)
 
-    if not np.all(cond_h_history == 1):
-        axes[2].semilogy(iterations, cond_h_history, 'm-', linewidth=2.5)
+    finite_cond = np.isfinite(cond_h_history)
+    if np.any(finite_cond):
+        axes[2].semilogy(iterations[finite_cond], cond_h_history[finite_cond], 'm-o', linewidth=2.5, markersize=5)
         axes[2].set_ylabel('Condition Number', fontsize=13)
-        axes[2].set_title('Approximate Hessian Condition Number', fontsize=15, fontweight='bold')
+        if lambda_min_history is not None and np.any(np.isfinite(lambda_min_history)):
+            finite_lambda = np.isfinite(lambda_min_history)
+            ax2b = axes[2].twinx()
+            ax2b.semilogy(
+                iterations[finite_lambda],
+                np.maximum(np.abs(lambda_min_history[finite_lambda]), 1e-30),
+                'c--s',
+                linewidth=1.8,
+                markersize=4,
+            )
+            ax2b.set_ylabel(r'$|\lambda_{\min}|$', fontsize=13)
+            ax2b.tick_params(labelsize=11)
+        axes[2].set_title('Reduced Hessian Diagnostics', fontsize=15, fontweight='bold')
     elif len(results['grad_norm_history']) > 0:
         relative_grad_norm = results['grad_norm_history'] / (results['grad_norm_history'][0] + 1e-15)
         axes[2].semilogy(iterations, relative_grad_norm, 'm-', linewidth=2.5)
@@ -368,6 +384,43 @@ def plot_iteration_history(results, save_path=None, noise_level=0.0, filename_st
         stem = filename_stem or f'iteration_history_noise_{noise_level*100:.0f}pct'
         _save_figure(fig, save_path, stem)
         print(f"  Iteration history figure saved to {_coerce_save_path(save_path)}")
+
+    return fig
+
+
+def plot_hessian_spectrum(results, save_path=None, filename_stem='hessian_spectrum'):
+    """
+    Plot the smallest estimated reduced-Hessian eigenvalues at the final iterate.
+
+    Args:
+        results: Optimization results dictionary
+        save_path: Path to save figure (optional)
+        filename_stem: Output filename stem without extension
+
+    Returns:
+        fig: The matplotlib figure, or None when diagnostics are unavailable
+    """
+    diagnostics = results.get('final_hessian_diagnostics')
+    if not diagnostics or 'smallest_eigenvalues' not in diagnostics:
+        print("  Warning: Reduced-Hessian spectrum not available in results")
+        return None
+
+    eigvals = np.asarray(diagnostics['smallest_eigenvalues'], dtype=float)
+    indices = np.arange(1, eigvals.size + 1)
+
+    fig = plt.figure(figsize=(8, 5.5))
+    ax = plt.subplot(1, 1, 1)
+    ax.semilogy(indices, np.maximum(np.abs(eigvals), 1e-30), 'o-', linewidth=2.5, markersize=7)
+    ax.set_xlabel('Mode Index', fontsize=13)
+    ax.set_ylabel(r'$|\lambda|$', fontsize=13)
+    ax.set_title('Smallest Reduced-Hessian Eigenvalues', fontsize=15, fontweight='bold')
+    ax.grid(True, alpha=0.3, linestyle='--')
+    ax.tick_params(labelsize=11)
+    plt.tight_layout()
+
+    if save_path:
+        _save_figure(fig, save_path, filename_stem)
+        print(f"  Hessian spectrum figure saved to {_coerce_save_path(save_path)}")
 
     return fig
 
@@ -604,10 +657,11 @@ def visualize_inverse_results(mesh_info, E_true, E_reconstructed, errors,
     """
     Visualize reconstruction results for the inverse problem.
 
-    Creates three separate figures:
+    Creates four separate figures:
     1. Reconstruction results
     2. Iteration history
     3. Gradient field
+    4. Reduced-Hessian spectrum
 
     Args:
         mesh_info: MeshInfo object
@@ -640,4 +694,9 @@ def visualize_inverse_results(mesh_info, E_true, E_reconstructed, errors,
         save_path=save_path,
         filename_stem=f'gradient_field_noise_{noise_level*100:.0f}pct',
     )
-    return fig1, fig2, fig3
+    fig4 = plot_hessian_spectrum(
+        results,
+        save_path=save_path,
+        filename_stem=f'hessian_spectrum_noise_{noise_level*100:.0f}pct',
+    )
+    return fig1, fig2, fig3, fig4

@@ -9,23 +9,8 @@ The project covers:
 - modulus-field reconstruction from displacement data
 - Tikhonov regularization and gradient checking
 - L-curve based regularization-parameter selection
+- reduced-Hessian based local uniqueness and ill-conditioning diagnostics
 - plotting and export utilities for saved results
-
-## Branch Strategy
-
-This repository is managed as a research codebase with one stable baseline branch and independent exploratory branches.
-
-- `main`: baseline branch for the current small-strain, linear-elastic, force-controlled workflow
-- `disp_linear`: displacement-controlled branch under small-strain linear elasticity
-- `disp_nonlinear`: displacement-controlled branch for finite-strain and nonlinear constitutive development
-
-The intended workflow is:
-
-- keep `main` stable and easy to rerun
-- let each research branch evolve independently
-- only bring clearly reusable fixes or utilities back to `main`
-
-See [docs/branch_scope.md](docs/branch_scope.md) for the lightweight branch rules and [docs/validation.md](docs/validation.md) for the validation-record template.
 
 ## Model Summary
 
@@ -62,6 +47,15 @@ The main defaults are defined in `config.py`, which now returns typed configurat
 - modulus targets: `Ex = 2.0`, `Ey = 0.5`
 - distribution type: `bil`
 - default regularization parameter for the fixed-gamma workflow: `1e-6`
+- default reduced-Hessian analysis: enabled at the final iterate only
+
+Relevant inverse-analysis defaults in `config.py` are:
+
+- `ENABLE_HESSIAN_ANALYSIS = True`
+- `HESSIAN_ANALYSIS_EVERY = 0`
+- `HESSIAN_N_EIGS = 6`
+- `KERNEL_PROBE_COUNT = 3`
+- `ANALYSIS_TOL = 1e-10`
 
 ## Typical Workflow
 
@@ -86,6 +80,13 @@ Alternative single-gamma L-BFGS-B workflow:
 python inverse_main.py
 ```
 
+With the current defaults, both inverse workflows also run reduced-Hessian diagnostics at the final iterate and print:
+
+- the smallest estimated eigenvalue
+- the largest estimated eigenvalue
+- an approximate condition number
+- whether the local reduced Hessian appears strictly positive
+
 4. Regenerate plots from saved result files if needed:
 
 ```bash
@@ -95,17 +96,6 @@ python plot_lcurve.py
 ```
 
 ## Output Files
-
-For branch-based research work, the recommended top-level result layout is:
-
-```text
-results/
-|-- main/
-|-- disp_linear/
-`-- disp_nonlinear/
-```
-
-Within each branch-specific result root, keep the current case-folder naming style so different studies stay easy to compare.
 
 The scripts save results into a folder named like:
 
@@ -123,6 +113,7 @@ Geo_9x9_Mesh_39x39_Alpha_0.1111_Beta_-0.0556_Gamma_1e-06/
 |   |-- reconstruction_results.png
 |   |-- iteration_history.png
 |   |-- gradient_field.png
+|   |-- hessian_spectrum.png
 |   |-- reconstruction_comparison.png
 |   |-- lcurve.png
 |   `-- curvature_vs_gamma.png
@@ -138,12 +129,11 @@ Typical generated files include:
 - `noise_XX.XXpct/reconstruction_results.png`
 - `noise_XX.XXpct/iteration_history.png`
 - `noise_XX.XXpct/gradient_field.png`
+- `noise_XX.XXpct/hessian_spectrum.png`
 - `noise_XX.XXpct/reconstruction_comparison.png`
 - additional exported figures from the plotting scripts
 
 Most plotting utilities automatically search for the most recently modified result folder that matches the `Geo_*_Mesh_*_Alpha_*_Beta_*_Gamma_*` pattern.
-
-For the current `main` branch, the present scripts still work with the existing case-folder layout in the repository root. The `results/<branch_name>/...` layout above is the recommended convention for ongoing branch development and future cleanup.
 
 ## Repository Layout
 
@@ -151,7 +141,7 @@ For the current `main` branch, the present scripts still work with the existing 
 
 | File | Purpose |
 | --- | --- |
-| `config.py` | Central configuration entry point for forward, inverse, and L-curve runs. It now returns typed config objects instead of loose dictionaries. |
+| `config.py` | Central configuration entry point for forward, inverse, and L-curve runs, including reduced-Hessian analysis settings. It now returns typed config objects instead of loose dictionaries. |
 | `forward_job.py` | Main forward-analysis entry point. Generates the mesh, builds the modulus field, applies boundary conditions, solves the FE system, and saves data and plots. |
 | `inverse_main.py` | Single-gamma inverse solver entry point based on the shared SciPy L-BFGS-B implementation in `fgm_asm/inverse_solver.py`. Saves results into noise-specific subdirectories. |
 | `inverse_l_curve.py` | Inverse solver entry point using SciPy L-BFGS-B together with L-curve based gamma selection, followed by a fresh rerun from the default initialization using the selected `gamma`. |
@@ -159,20 +149,19 @@ For the current `main` branch, the present scripts still work with the existing 
 | `plot_forward_results.py` | Reloads saved forward results and exports standalone forward-problem figures. |
 | `plot_inverse_results.py` | Reloads saved inverse results and exports reconstruction, convergence, gradient, and scan-vs-rerun comparison plots. |
 | `plot_lcurve.py` | Reloads saved L-curve data and exports the L-curve and curvature figures. |
-| `docs/branch_scope.md` | Lightweight branch-management note describing the role of `main`, `disp_linear`, and `disp_nonlinear`. |
-| `docs/validation.md` | Lightweight validation checklist and record template for each research branch. |
 
 ### Package Modules
 
 | File | Purpose |
 | --- | --- |
 | `fgm_asm/__init__.py` | Package export surface for the main solver utilities. |
-| `fgm_asm/config_types.py` | Dataclass-based configuration contracts for forward, inverse, and L-curve workflows, plus coercion helpers for backward-compatible loading. |
+| `fgm_asm/config_types.py` | Dataclass-based configuration contracts for forward, inverse, and L-curve workflows, including reduced-Hessian analysis controls, plus coercion helpers for backward-compatible loading. |
 | `fgm_asm/mesh.py` | Structured mesh generation, quadrature shape functions, sparse indexing, cached geometry-only FE data, mass-matrix assembly, regularization-matrix assembly, body-force loading, and `setup_boundary_conditions`. |
 | `fgm_asm/material.py` | Material container class and utilities for generating bilinear or exponential FGM modulus fields. |
 | `fgm_asm/fem_forward.py` | FE assembly and forward/adjoint linear solves with reusable stiffness-factorization support. |
 | `fgm_asm/regularization.py` | Matrix-based Tikhonov regularization value and gradient with respect to nodal modulus variables. |
-| `fgm_asm/inverse_solver.py` | Adjoint-based gradient terms and the shared SciPy L-BFGS-B inverse solver with cached objective-state reuse. |
+| `fgm_asm/inverse_solver.py` | Adjoint-based gradient terms, shared inverse operators, and the shared SciPy L-BFGS-B inverse solver with cached objective-state reuse. |
+| `fgm_asm/inverse_analysis.py` | Reduced-Hessian operator diagnostics, spectral estimation, and local uniqueness/ill-conditioning analysis for the inverse problem. |
 | `fgm_asm/l_curve.py` | Gamma sweep, curvature-based L-curve corner detection, and L-curve plotting. |
 | `fgm_asm/results_io.py` | Centralized result discovery, path conventions, pickle save/load helpers, and noise-specific output-directory management. |
 | `fgm_asm/workflows.py` | Shared script-level helpers for loading the latest forward dataset and resolving result directories. |
@@ -206,17 +195,27 @@ This is the most complete end-to-end inverse workflow in the current repository:
 - reruns the inverse problem from the default initialization with the selected `gamma`
 - saves both the L-curve scan data and the final rerun result
 - stores the scan-optimal solution inside `inverse_results.pkl` so it can be compared with the final rerun
+- runs reduced-Hessian diagnostics for the final rerun and saves the results inside `inverse_results.pkl`
 
-In the current `disp_linear` branch, the optimization variables are unconstrained nodal parameters
+In the current displacement-controlled inverse workflow, the optimization variables are unconstrained nodal parameters
 `raw`, which are mapped to a positive normalized modulus field
 `Ehat = exp(raw) / mean(exp(raw))`. The absolute modulus scale is not optimized directly; it is
 recovered afterward from the measured tensile-end reaction force.
+
+The final rerun result now also contains a `final_hessian_diagnostics` dictionary with:
+
+- `lambda_min`
+- `lambda_max`
+- `condition_number`
+- `is_locally_strictly_positive`
+- `smallest_eigenvalues`
+- `kernel_probes`
 
 ### `inverse_main.py`
 
 This script uses the same SciPy L-BFGS-B implementation as the L-curve workflow, but with a fixed user-specified `gamma`.
 
-It saves each noise case into its own `noise_XX.XXpct` subdirectory. The current repository is still more polished around the L-curve workflow, so `inverse_l_curve.py` remains the safer default entry point.
+It saves each noise case into its own `noise_XX.XXpct` subdirectory and writes the same reduced-Hessian diagnostics into the saved result dictionary. The repository is still more polished around the L-curve workflow, so `inverse_l_curve.py` remains the safer default entry point.
 
 ## Plotting
 
@@ -225,6 +224,7 @@ It saves each noise case into its own `noise_XX.XXpct` subdirectory. The current
 - the final rerun reconstruction figure
 - iteration-history plots for the final rerun
 - gradient-field plots for the final rerun
+- a reduced-Hessian spectrum plot for the final rerun
 - a comparison figure between the L-curve scan optimum and the final rerun with the selected `gamma`
 
 The comparison plot is useful when you want to see whether warm-start continuation during the L-curve sweep materially changes the selected solution compared with a clean rerun from the default initialization.
@@ -239,16 +239,14 @@ The comparison plot is useful when you want to see whether warm-start continuati
 - `mesh.py` now precomputes geometry-only quadrature data once per mesh and assembles the regularization matrix once for reuse.
 - `fem_forward.py` reuses one stiffness factorization for both forward and adjoint solves inside the same inverse-state evaluation.
 - `inverse_solver.py` uses one cached L-BFGS-B evaluation path and avoids duplicate forward solves in callbacks and L-curve post-processing.
+- `inverse_analysis.py` reuses shared inverse operators from `inverse_solver.py` instead of duplicating the directional derivative and incremental-state logic.
 - `setup_boundary_conditions` now lives in `fgm_asm/mesh.py`.
 - `forward_job.py` saves figures without blocking on an interactive Matplotlib window.
 - `inverse_l_curve.py` processes one noise value per run. If `config.py` provides multiple values, the script currently uses the first one.
 - In the current displacement-controlled inverse workflow, the adjoint problem uses homogeneous Dirichlet conditions on prescribed-displacement DOFs rather than reusing the forward loading values.
+- With `HESSIAN_ANALYSIS_EVERY = 0`, reduced-Hessian analysis is performed only at the final iterate. This is the recommended default because intermediate spectral checks are much more expensive.
 - Plotting scripts rely on saved pickle files rather than rerunning the solver.
 - Result files are stored as Python pickle objects, which is convenient for internal reuse but not intended as a stable interchange format.
-- For research branching, keep each branch's scope, output layout, and validation notes documented even if the code stays largely independent.
-
-## disp_linear Branch Notes
-
 - Loading mode: displacement-controlled linear elasticity under small strain.
 - Forward runs save both the displacement field and the tensile-end reaction force needed by the inverse workflow.
 - The inverse solver reconstructs the normalized shape of the modulus field first and then recovers the global modulus scale from the saved reaction-force target.

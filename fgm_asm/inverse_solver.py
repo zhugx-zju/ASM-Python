@@ -65,6 +65,81 @@ def get_stiffness_gradient(fem_info, lambda_vec, forw_U):
     return -np.bincount(id_list, weights=grad_E.T.ravel(), minlength=mesh_info.n_nod)
 
 
+def assemble_stiffness_parameter_action(fem_info, forw_U, direction_ehat):
+    """
+    Assemble ``(dK/dEhat)[direction_ehat] * U`` in global DOF space.
+
+    Args:
+        fem_info: FEMInfo object at the current state
+        forw_U: Forward displacement vector [n_dof]
+        direction_ehat: Direction in nodal Ehat space [n_nod]
+
+    Returns:
+        global_vec: Global DOF vector [n_dof]
+    """
+    mesh_info = fem_info.mesh_info
+    direction_ehat = np.asarray(direction_ehat, dtype=float).ravel()
+    u_ele = np.asarray(forw_U, dtype=float).ravel()[mesh_info.ele_dof_id]
+    dir_ele = direction_ehat[mesh_info.ele_nods_id - 1]
+
+    rhs_ele = np.zeros((mesh_info.n_el, 8), dtype=float)
+
+    for ig in range(mesh_info.gauss_N.shape[0]):
+        b_i = fem_info.B_gauss[ig]
+        dir_gauss = dir_ele @ mesh_info.gauss_N[ig]
+        strain = np.einsum('eia,ea->ei', b_i, u_ele)
+        stress = np.einsum('ij,ej->ei', fem_info.D0, strain)
+        internal = np.einsum('eia,ei->ea', b_i, stress)
+        weight = mesh_info.gauss_w[ig] * fem_info.det_j_gauss[ig] * dir_gauss
+        rhs_ele += weight[:, None] * internal
+
+    global_vec = np.zeros(mesh_info.n_dof, dtype=float)
+    np.add.at(global_vec, mesh_info.ele_dof_id, rhs_ele)
+    return global_vec
+
+
+def solve_incremental_state(fem_info, forw_U, direction_ehat):
+    """
+    Solve the linearized state equation in direction ``direction_ehat``.
+
+    Args:
+        fem_info: FEMInfo object at the current state
+        forw_U: Forward displacement vector [n_dof]
+        direction_ehat: Direction in nodal Ehat space [n_nod]
+
+    Returns:
+        dU: State sensitivity [n_dof]
+    """
+    rhs = -assemble_stiffness_parameter_action(fem_info, forw_U, direction_ehat)
+    zero_bc = np.zeros(fem_info.mesh_info.n_dof, dtype=float)
+    return solve_system(fem_info, rhs, prescribed_values=zero_bc)
+
+
+def apply_reduced_gauss_newton_hessian(mesh_info, state, gamma, direction_ehat):
+    """
+    Apply the reduced Gauss-Newton Hessian in Ehat space to a direction.
+
+    Args:
+        mesh_info: MeshInfo object
+        state: Cached inverse state dictionary
+        gamma: Regularization coefficient
+        direction_ehat: Direction in nodal Ehat space [n_nod]
+
+    Returns:
+        h_dir: Hessian-vector product [n_nod]
+        d_u: State sensitivity [n_dof]
+    """
+    direction_ehat = np.asarray(direction_ehat, dtype=float).ravel()
+    fem_info = state['fem_info']
+    forw_U = state['forw_U']
+
+    d_u = solve_incremental_state(fem_info, forw_U, direction_ehat)
+    w_vec = lambda_distance(fem_info, rhs=np.asarray(mesh_info.M @ d_u).ravel())
+    data_term = get_stiffness_gradient(fem_info, w_vec, forw_U)
+    reg_term = gamma * np.asarray(mesh_info.get_regularization_matrix() @ direction_ehat).ravel()
+    return data_term + reg_term, d_u
+
+
 def _raw_to_ehat(raw_vec):
     """
     Map the unconstrained optimization vector to a positive normalized field.
@@ -189,7 +264,12 @@ def _evaluate_inverse_state(mesh_info, bc_info, U_measured, material_info, gamma
 
 def lbfgs_inverse_solver_scipy(mesh_info, bc_info, U_measured, tensile_end_force,
                                raw_init=None, gamma=1e-6, E_max=1000.0,
-                               max_iter=2000, ftol=1e-12, gtol=1e-8, nu=0.3):
+                               max_iter=2000, ftol=1e-12, gtol=1e-8, nu=0.3,
+                               enable_hessian_analysis=True,
+                               hessian_analysis_every=0,
+                               hessian_n_eigs=6,
+                               kernel_probe_count=3,
+                               analysis_tol=1e-10):
     """
     Solve the inverse problem using a positive normalized modulus field Ehat.
 
@@ -205,6 +285,11 @@ def lbfgs_inverse_solver_scipy(mesh_info, bc_info, U_measured, tensile_end_force
         ftol: Function tolerance
         gtol: Gradient tolerance in raw-parameter space
         nu: Poisson's ratio
+        enable_hessian_analysis: Whether to run reduced-Hessian diagnostics
+        hessian_analysis_every: Accepted-iteration interval for lightweight diagnostics
+        hessian_n_eigs: Number of smallest eigenvalues to estimate
+        kernel_probe_count: Number of softest modes to inspect
+        analysis_tol: Numerical tolerance for near-null detection
 
     Returns:
         results: Dictionary containing optimization results and cached final state
@@ -241,6 +326,19 @@ def lbfgs_inverse_solver_scipy(mesh_info, bc_info, U_measured, tensile_end_force
     cost_tar_history = [initial_state['cost_tar']]
     cost_reg_history = [initial_state['cost_reg']]
     gradient_norms = [np.linalg.norm(initial_state['grad_raw'])]
+    cond_h_history = [np.nan]
+    lambda_min_history = [np.nan]
+
+    def run_hessian_analysis(state):
+        from .inverse_analysis import analyze_reduced_hessian
+        return analyze_reduced_hessian(
+            mesh_info,
+            state,
+            gamma,
+            n_eigs=hessian_n_eigs,
+            kernel_probe_count=kernel_probe_count,
+            tol=analysis_tol,
+        )
 
     def objective_and_gradient(raw_vec_flat):
         raw_vec_use = np.array(raw_vec_flat, copy=False)
@@ -279,8 +377,15 @@ def lbfgs_inverse_solver_scipy(mesh_info, bc_info, U_measured, tensile_end_force
         cost_tar_history.append(state['cost_tar'])
         cost_reg_history.append(state['cost_reg'])
         gradient_norms.append(np.linalg.norm(state['grad_raw']))
-
         accepted_iterations = len(cost_history) - 1
+        if enable_hessian_analysis and hessian_analysis_every > 0 and accepted_iterations % hessian_analysis_every == 0:
+            diagnostics = run_hessian_analysis(state)
+            cond_h_history.append(diagnostics['condition_number'])
+            lambda_min_history.append(diagnostics['lambda_min'])
+        else:
+            cond_h_history.append(np.nan)
+            lambda_min_history.append(np.nan)
+
         if accepted_iterations == 1 or (accepted_iterations > 0 and accepted_iterations % 10 == 0):
             print(f"  Iteration {accepted_iterations:4d}: "
                   f"Cost = {state['objective']:.6e}, "
@@ -316,6 +421,12 @@ def lbfgs_inverse_solver_scipy(mesh_info, bc_info, U_measured, tensile_end_force
         )
 
     Ehat_final = final_state['Ehat_vec']
+    final_hessian_diagnostics = None
+    if enable_hessian_analysis:
+        final_hessian_diagnostics = run_hessian_analysis(final_state)
+        cond_h_history[-1] = final_hessian_diagnostics['condition_number']
+        lambda_min_history[-1] = final_hessian_diagnostics['lambda_min']
+
     # The global scale alpha is not part of the optimization variables.
     # It is recovered once from the measured tensile-end force after Ehat converges.
     alpha_final, force_unit_final = _recover_alpha_from_force(
@@ -333,6 +444,12 @@ def lbfgs_inverse_solver_scipy(mesh_info, bc_info, U_measured, tensile_end_force
     print(f"  Final alpha: {alpha_final:.6e}")
     print(f"  Final Ehat: min={Ehat_final.min():.4f}, max={Ehat_final.max():.4f}, mean={Ehat_final.mean():.4f}")
     print(f"  Final modulus: min={E_final.min():.4f}, max={E_final.max():.4f}, mean={E_final.mean():.4f}")
+    if final_hessian_diagnostics is not None:
+        print(f"  Reduced-Hessian lambda_min: {final_hessian_diagnostics['lambda_min']:.6e}")
+        print(f"  Reduced-Hessian lambda_max: {final_hessian_diagnostics['lambda_max']:.6e}")
+        print(f"  Reduced-Hessian cond: {final_hessian_diagnostics['condition_number']:.6e}")
+        print(f"  Reduced-Hessian near-nullspace detected: {final_hessian_diagnostics['near_nullspace_detected']}")
+        print(f"  Reduced-Hessian negative curvature detected: {final_hessian_diagnostics['has_negative_curvature']}")
 
     return {
         'E_final': E_final,
@@ -345,7 +462,8 @@ def lbfgs_inverse_solver_scipy(mesh_info, bc_info, U_measured, tensile_end_force
         'cost_reg_history': np.array(cost_reg_history),
         'grad_norm_history': np.array(gradient_norms),
         'gradient_norms': np.array(gradient_norms),
-        'cond_H_history': np.ones(len(gradient_norms)),
+        'cond_H_history': np.array(cond_h_history, dtype=float),
+        'lambda_min_history': np.array(lambda_min_history, dtype=float),
         'n_iterations': int(result.nit),
         'converged': bool(result.success),
         'message': str(result.message),
@@ -357,4 +475,5 @@ def lbfgs_inverse_solver_scipy(mesh_info, bc_info, U_measured, tensile_end_force
         'final_gradient': final_state['grad_raw'],
         'final_grad_tar': final_state['grad_tar_raw'],
         'final_grad_reg': final_state['grad_reg_raw'],
+        'final_hessian_diagnostics': final_hessian_diagnostics,
     }

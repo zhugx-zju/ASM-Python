@@ -15,7 +15,12 @@ from .inverse_solver import lbfgs_inverse_solver_scipy
 
 def find_optimal_gamma_lcurve(mesh_info, bc_info, U_measured, tensile_end_force, config,
                                gamma_min=1e-10, gamma_max=1e-4, n_gamma=15,
-                               E_max=1000.0, max_iter=2000, ftol=1e-12, gtol=1e-8):
+                               E_max=1000.0, max_iter=2000, ftol=1e-12, gtol=1e-8,
+                               enable_hessian_analysis=True,
+                               hessian_analysis_every=0,
+                               hessian_n_eigs=6,
+                               kernel_probe_count=3,
+                               analysis_tol=1e-10):
     """
     Use L-curve method to find optimal regularization parameter.
 
@@ -111,7 +116,12 @@ def find_optimal_gamma_lcurve(mesh_info, bc_info, U_measured, tensile_end_force,
             max_iter=max_iter,
             ftol=ftol,
             gtol=gtol,
-            nu=forward_config.nu
+            nu=forward_config.nu,
+            enable_hessian_analysis=enable_hessian_analysis,
+            hessian_analysis_every=hessian_analysis_every,
+            hessian_n_eigs=hessian_n_eigs,
+            kernel_probe_count=kernel_probe_count,
+            analysis_tol=analysis_tol,
         )
 
         # Update raw_current for next iteration (warm-start)
