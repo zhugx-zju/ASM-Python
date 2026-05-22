@@ -28,7 +28,9 @@ def lambda_distance(fem_info, forw_U=None, U_measured=None, rhs=None):
         mesh_info = fem_info.mesh_info
         if mesh_info.M is None:
             mesh_info.assemble_mass_matrix()
-        rhs = np.asarray(mesh_info.M @ (forw_U - U_measured)).ravel()
+        # Match the discrete adjoint equation in the derivation:
+        # K lambda = -M (U - U_measured).
+        rhs = np.asarray(- mesh_info.M @ (forw_U - U_measured)).ravel()
     return solve_system(fem_info, rhs)
 
 
@@ -60,7 +62,7 @@ def get_stiffness_gradient(fem_info, lambda_vec, forw_U):
         directional_term = np.einsum('ea,eab,eb->e', lambda_ele, BD0B, forw_U_ele)
         grad_E += (mesh_info.gauss_w[ig] * directional_term)[:, None] * mesh_info.gauss_N[ig][None, :]
 
-    return -np.bincount(id_list, weights=grad_E.T.ravel(), minlength=mesh_info.n_nod)
+    return np.bincount(id_list, weights=grad_E.T.ravel(), minlength=mesh_info.n_nod)
 
 
 def _evaluate_inverse_state(mesh_info, bc_info, U_measured, material_info, gamma, E_vec, iteration):
@@ -90,7 +92,7 @@ def _evaluate_inverse_state(mesh_info, bc_info, U_measured, material_info, gamma
     reg_value = get_tikhonov_regularization(mesh_info, material_info)
     cost_reg = 0.5 * gamma * reg_value
 
-    lambda_vec = lambda_distance(fem_info, rhs=-mass_residual)
+    lambda_vec = lambda_distance(fem_info, rhs=mass_residual)
     grad_tar_E = get_stiffness_gradient(fem_info, lambda_vec, forw_U)
     grad_reg_E = 0.5 * gamma * get_tikhonov_gradient(mesh_info, material_info)
 
