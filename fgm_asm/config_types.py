@@ -49,9 +49,7 @@ class InverseConfig:
     noise_levels: tuple[float, ...]
     nu: float
     enable_hessian_analysis: bool = True
-    hessian_analysis_every: int = 0
     hessian_n_eigs: int = 6
-    kernel_probe_count: int = 3
     analysis_tol: float = 1e-10
 
     @property
@@ -80,9 +78,7 @@ class LCurveConfig:
     gtol: float
     nu: float
     enable_hessian_analysis: bool = True
-    hessian_analysis_every: int = 0
     hessian_n_eigs: int = 6
-    kernel_probe_count: int = 3
     analysis_tol: float = 1e-10
 
     def to_dict(self) -> dict:
@@ -128,9 +124,7 @@ def coerce_inverse_config(config: InverseConfig | Mapping[str, object]) -> Inver
         noise_levels=normalize_noise_levels(config["noise_levels"]),
         nu=float(config["nu"]),
         enable_hessian_analysis=bool(config.get("enable_hessian_analysis", True)),
-        hessian_analysis_every=int(config.get("hessian_analysis_every", 0)),
         hessian_n_eigs=int(config.get("hessian_n_eigs", 6)),
-        kernel_probe_count=int(config.get("kernel_probe_count", 3)),
         analysis_tol=float(config.get("analysis_tol", 1e-10)),
     )
 
@@ -150,8 +144,6 @@ def coerce_lcurve_config(config: LCurveConfig | Mapping[str, object]) -> LCurveC
         gtol=float(config["gtol"]),
         nu=float(config["nu"]),
         enable_hessian_analysis=bool(config.get("enable_hessian_analysis", True)),
-        hessian_analysis_every=int(config.get("hessian_analysis_every", 0)),
         hessian_n_eigs=int(config.get("hessian_n_eigs", 6)),
-        kernel_probe_count=int(config.get("kernel_probe_count", 3)),
         analysis_tol=float(config.get("analysis_tol", 1e-10)),
     )

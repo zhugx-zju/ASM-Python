@@ -45,7 +45,7 @@ def _save_figure(fig, save_path, stem, formats=('png', 'pdf'), dpi=1200):
         fig.savefig(save_path / f'{stem}.{ext}', **kwargs)
 
 
-def create_smooth_contour(x, y, z, ax, levels=100, cmap='viridis', colorbar_label=None, **kwargs):
+def create_smooth_contour(x, y, z, ax, cmap='viridis', **kwargs):
     """
     Create smooth contour plot using ``pcolormesh`` for better smoothness.
 
@@ -54,14 +54,11 @@ def create_smooth_contour(x, y, z, ax, levels=100, cmap='viridis', colorbar_labe
         y: Y coordinates (2D mesh)
         z: Z values (2D mesh)
         ax: Matplotlib axis
-        levels: Kept for compatibility with older callers
         cmap: Colormap
-        colorbar_label: Kept for compatibility with older callers
 
     Returns:
         Plot object
     """
-    del levels, colorbar_label
     return ax.pcolormesh(x, y, z, cmap=cmap, shading='gouraud', **kwargs)
 
 
@@ -314,14 +311,6 @@ def plot_iteration_history(results, save_path=None, noise_level=0.0, filename_st
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))
 
     iterations = np.arange(len(results['cost_history']))
-    cond_h_history = results.get('cond_H_history')
-    lambda_min_history = results.get('lambda_min_history')
-    if cond_h_history is None:
-        cond_h_history = np.full(len(results['grad_norm_history']), np.nan)
-    else:
-        cond_h_history = np.asarray(cond_h_history)
-    if lambda_min_history is not None:
-        lambda_min_history = np.asarray(lambda_min_history)
 
     axes[0].semilogy(iterations, results['cost_history'], 'b-', linewidth=2.5, label='Total Cost')
     axes[0].semilogy(iterations, results['cost_tar_history'], 'r--', linewidth=2, label='Data Misfit')
@@ -340,24 +329,7 @@ def plot_iteration_history(results, save_path=None, noise_level=0.0, filename_st
     axes[1].grid(True, alpha=0.3, linestyle='--')
     axes[1].tick_params(labelsize=11)
 
-    finite_cond = np.isfinite(cond_h_history)
-    if np.any(finite_cond):
-        axes[2].semilogy(iterations[finite_cond], cond_h_history[finite_cond], 'm-o', linewidth=2.5, markersize=5)
-        axes[2].set_ylabel('Condition Number', fontsize=13)
-        if lambda_min_history is not None and np.any(np.isfinite(lambda_min_history)):
-            finite_lambda = np.isfinite(lambda_min_history)
-            ax2b = axes[2].twinx()
-            ax2b.semilogy(
-                iterations[finite_lambda],
-                np.maximum(np.abs(lambda_min_history[finite_lambda]), 1e-30),
-                'c--s',
-                linewidth=1.8,
-                markersize=4,
-            )
-            ax2b.set_ylabel(r'$|\lambda_{\min}|$', fontsize=13)
-            ax2b.tick_params(labelsize=11)
-        axes[2].set_title('Reduced Hessian Diagnostics', fontsize=15, fontweight='bold')
-    elif len(results['grad_norm_history']) > 0:
+    if len(results['grad_norm_history']) > 0:
         relative_grad_norm = results['grad_norm_history'] / (results['grad_norm_history'][0] + 1e-15)
         axes[2].semilogy(iterations, relative_grad_norm, 'm-', linewidth=2.5)
         axes[2].set_ylabel('Relative Gradient Norm', fontsize=13)
@@ -390,7 +362,7 @@ def plot_iteration_history(results, save_path=None, noise_level=0.0, filename_st
 
 def plot_hessian_spectrum(results, save_path=None, filename_stem='hessian_spectrum'):
     """
-    Plot the smallest estimated reduced-Hessian eigenvalues at the final iterate.
+    Plot the smallest explicit physical-E-space regularized reduced-Hessian eigenvalues.
 
     Args:
         results: Optimization results dictionary
@@ -413,7 +385,7 @@ def plot_hessian_spectrum(results, save_path=None, filename_stem='hessian_spectr
     ax.semilogy(indices, np.maximum(np.abs(eigvals), 1e-30), 'o-', linewidth=2.5, markersize=7)
     ax.set_xlabel('Mode Index', fontsize=13)
     ax.set_ylabel(r'$|\lambda|$', fontsize=13)
-    ax.set_title('Smallest Reduced-Hessian Eigenvalues', fontsize=15, fontweight='bold')
+    ax.set_title('Smallest Physical Reduced-Hessian Eigenvalues', fontsize=15, fontweight='bold')
     ax.grid(True, alpha=0.3, linestyle='--')
     ax.tick_params(labelsize=11)
     plt.tight_layout()
@@ -602,7 +574,7 @@ def plot_reconstruction_comparison(mesh_info, E_true, scan_E_reconstructed,
     return fig
 
 
-def visualize_forward_results(mesh_info, E_field, U, config, save_path=None, show=True):
+def visualize_forward_results(mesh_info, E_field, U, save_path=None, show=True):
     """
     Visualize modulus distribution and displacement field for the forward problem.
 
@@ -610,11 +582,9 @@ def visualize_forward_results(mesh_info, E_field, U, config, save_path=None, sho
         mesh_info: MeshInfo object
         E_field: Modulus field [nods_y, nods_x]
         U: Displacement vector [n_dof]
-        config: Unused retained argument for script compatibility
         save_path: Path to save figures (optional)
         show: Whether to display the figure interactively
     """
-    del config
     ux, uy = _extract_displacement_fields(mesh_info, U)
 
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))

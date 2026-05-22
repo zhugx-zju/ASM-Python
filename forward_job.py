@@ -116,7 +116,7 @@ print(f"  Data saved to {output_dir / 'forward_problem_data.pkl'}")
 # Visualize
 # ============================================================
 print("\nGenerating visualizations...")
-visualize_forward_results(mesh_info, E_field, U, config, save_path=output_dir, show=False)
+visualize_forward_results(mesh_info, E_field, U, save_path=output_dir, show=False)
 
 print("\n" + "=" * 60)
 print("Forward problem solved successfully!")

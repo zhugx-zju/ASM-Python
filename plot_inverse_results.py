@@ -19,6 +19,25 @@ from fgm_asm.visualization import (
 from fgm_asm.results_io import find_inverse_results_path, load_inverse_data
 
 
+def _print_hessian_summary(label, diagnostics):
+    """Print a compact Hessian spectral summary."""
+    if diagnostics is None:
+        return
+    near_nullspace = diagnostics.get('near_nullspace_detected')
+    negative_curvature = diagnostics.get('has_negative_curvature')
+    is_positive_definite = diagnostics.get('is_positive_definite')
+    print(f"  {label}:")
+    print(f"    lambda_min: {diagnostics['lambda_min']:.6e}")
+    print(f"    lambda_max: {diagnostics['lambda_max']:.6e}")
+    print(f"    condition number: {diagnostics['condition_number']:.6e}")
+    if is_positive_definite is not None:
+        print(f"    positive definite: {is_positive_definite}")
+    if near_nullspace is not None:
+        print(f"    near-nullspace detected: {near_nullspace}")
+    if negative_curvature is not None:
+        print(f"    negative curvature detected: {negative_curvature}")
+
+
 # ============================================================
 # Main execution
 # ============================================================
@@ -37,16 +56,9 @@ print(f"  Loaded inverse results from {inverse_results_path}")
 mesh_info = forward_data['mesh_info']
 E_true = forward_data['E_field']
 
-# Extract inverse results
-# For backward compatibility, check both possible locations
-if 'E_reconstructed' in inverse_results:
-    E_reconstructed = inverse_results['E_reconstructed']
-else:
-    # Fallback for older saved files
-    E_reconstructed = inverse_results['results']['E_final']
-
 errors = inverse_results['errors']
 results = inverse_results['results']
+E_reconstructed = results['E_final']
 noise_level = inverse_results['noise_level']
 scan_optimal = inverse_results.get('scan_optimal')
 comparison_summary = inverse_results.get('comparison_summary', None)
@@ -60,13 +72,11 @@ if comparison_summary is not None:
     print(f"  Rerun-vs-scan rel. L2: {comparison_summary['modulus_diff_rel_l2']:.6e}")
 
 diagnostics = results.get('final_hessian_diagnostics')
-if diagnostics is not None:
+data_diagnostics = results.get('final_data_hessian_diagnostics')
+if diagnostics is not None or data_diagnostics is not None:
     print("  Reduced-Hessian diagnostics:")
-    print(f"    lambda_min: {diagnostics['lambda_min']:.6e}")
-    print(f"    lambda_max: {diagnostics['lambda_max']:.6e}")
-    print(f"    condition number: {diagnostics['condition_number']:.6e}")
-    print(f"    near-nullspace detected: {diagnostics['near_nullspace_detected']}")
-    print(f"    negative curvature detected: {diagnostics['has_negative_curvature']}")
+    _print_hessian_summary("Data Hessian J_E^T M J_E", data_diagnostics)
+    _print_hessian_summary("Regularized Hessian J_E^T M J_E + gamma G", diagnostics)
 else:
     print("  Reduced-Hessian diagnostics: not available in saved results")
 
@@ -105,4 +115,7 @@ print("Inverse results plotted successfully!")
 print(f"Figures saved to {results_folder}")
 print("=" * 70)
 
-plt.show()
+if 'agg' in plt.get_backend().lower():
+    plt.close('all')
+else:
+    plt.show()

@@ -146,7 +146,6 @@ def save_inverse_results(results: dict[str, Any], errors: dict[str, Any], E_true
         "results": results,
         "errors": errors,
         "E_true": E_true,
-        "E_reconstructed": results["E_final"],
         "noise_level": noise_level,
     }
     if extra_data:

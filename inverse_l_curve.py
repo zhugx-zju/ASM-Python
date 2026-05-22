@@ -29,6 +29,75 @@ from fgm_asm.workflows import load_latest_forward_problem, resolve_results_dir
 import config as cfg
 
 
+def _print_hessian_summary(label, diagnostics):
+    """Print a compact Hessian spectral summary."""
+    if diagnostics is None:
+        return
+    print(f"  {label}:")
+    print(f"    lambda_min: {diagnostics['lambda_min']:.6e}")
+    print(f"    lambda_max: {diagnostics['lambda_max']:.6e}")
+    print(f"    condition number: {diagnostics['condition_number']:.6e}")
+    print(f"    positive definite: {diagnostics['is_positive_definite']}")
+    print(f"    near-nullspace detected: {diagnostics['near_nullspace_detected']}")
+    print(f"    negative curvature detected: {diagnostics['has_negative_curvature']}")
+
+
+def _diagnostics_snapshot_entries(prefix, diagnostics):
+    """Serialize Hessian diagnostics into config-snapshot-friendly literals."""
+    def _snapshot_number(value):
+        value = float(value)
+        if np.isfinite(value):
+            return value
+        if np.isnan(value):
+            return "nan"
+        return "inf" if value > 0.0 else "-inf"
+
+    if diagnostics is None:
+        return {
+            f"{prefix}_OPERATOR": None,
+            f"{prefix}_LAMBDA_MIN": None,
+            f"{prefix}_LAMBDA_MAX": None,
+            f"{prefix}_CONDITION_NUMBER": None,
+            f"{prefix}_IS_POSITIVE_DEFINITE": None,
+            f"{prefix}_NEAR_NULLSPACE_DETECTED": None,
+            f"{prefix}_NEGATIVE_CURVATURE_DETECTED": None,
+            f"{prefix}_SMALLEST_EIGENVALUES": None,
+            f"{prefix}_SMALLEST_EIGENPAIR_SUMMARIES": None,
+            f"{prefix}_SMALLEST_EIGENVECTORS": None,
+        }
+
+    eigenpair_summaries = diagnostics.get("smallest_eigenpair_summaries", [])
+    serialized_summaries = [
+        {
+            "mode_index": int(mode["mode_index"]),
+            "eigenvalue": float(mode["eigenvalue"]),
+            "data_energy": float(mode["data_energy"]),
+            "regularization_energy": (
+                None if mode.get("regularization_energy") is None else float(mode["regularization_energy"])
+            ),
+            "total_energy": None if mode.get("total_energy") is None else float(mode["total_energy"]),
+            "min_component": float(mode["min_component"]),
+            "max_component": float(mode["max_component"]),
+            "mean_component": float(mode["mean_component"]),
+        }
+        for mode in eigenpair_summaries
+    ]
+    vectors = np.asarray(diagnostics.get("smallest_eigenvectors"), dtype=float)
+
+    return {
+        f"{prefix}_OPERATOR": str(diagnostics["operator_name"]),
+        f"{prefix}_LAMBDA_MIN": _snapshot_number(diagnostics["lambda_min"]),
+        f"{prefix}_LAMBDA_MAX": _snapshot_number(diagnostics["lambda_max"]),
+        f"{prefix}_CONDITION_NUMBER": _snapshot_number(diagnostics["condition_number"]),
+        f"{prefix}_IS_POSITIVE_DEFINITE": bool(diagnostics["is_positive_definite"]),
+        f"{prefix}_NEAR_NULLSPACE_DETECTED": bool(diagnostics["near_nullspace_detected"]),
+        f"{prefix}_NEGATIVE_CURVATURE_DETECTED": bool(diagnostics["has_negative_curvature"]),
+        f"{prefix}_SMALLEST_EIGENVALUES": np.asarray(diagnostics["smallest_eigenvalues"], dtype=float).tolist(),
+        f"{prefix}_SMALLEST_EIGENPAIR_SUMMARIES": serialized_summaries,
+        f"{prefix}_SMALLEST_EIGENVECTORS": vectors.T.tolist(),
+    }
+
+
 lcurve_config = cfg.get_lcurve_config()
 inverse_config = cfg.get_inverse_config()
 noise_level = inverse_config.primary_noise_level
@@ -59,7 +128,6 @@ print(f"  Modulus bounds: [{lcurve_config.E_min}, {lcurve_config.E_max}]")
 print(f"  Max iterations: {lcurve_config.max_iter}")
 print(f"  ftol: {lcurve_config.ftol:.2e}, gtol: {lcurve_config.gtol:.2e}")
 print(f"  Hessian analysis: {lcurve_config.enable_hessian_analysis}")
-print(f"  Hessian analysis interval: {lcurve_config.hessian_analysis_every}")
 
 output_dir = resolve_results_dir(forward_data_path, forward_data)
 noise_output_dir = get_noise_output_dir(output_dir, noise_level)
@@ -82,14 +150,11 @@ gamma_optimal, lcurve_results = find_optimal_gamma_lcurve(
     gamma_min=lcurve_config.gamma_min,
     gamma_max=lcurve_config.gamma_max,
     n_gamma=lcurve_config.n_gamma,
-    E_max=lcurve_config.E_max,
     max_iter=lcurve_config.max_iter,
     ftol=lcurve_config.ftol,
     gtol=lcurve_config.gtol,
     enable_hessian_analysis=False,
-    hessian_analysis_every=0,
     hessian_n_eigs=lcurve_config.hessian_n_eigs,
-    kernel_probe_count=lcurve_config.kernel_probe_count,
     analysis_tol=lcurve_config.analysis_tol,
 )
 elapsed_time_lcurve = time.time() - start_time_lcurve
@@ -113,15 +178,12 @@ results = lbfgs_inverse_solver_scipy(
     tensile_end_force=tensile_end_force,
     raw_init=None,
     gamma=gamma_optimal,
-    E_max=lcurve_config.E_max,
     max_iter=lcurve_config.max_iter,
     ftol=lcurve_config.ftol,
     gtol=lcurve_config.gtol,
     nu=forward_config.nu,
     enable_hessian_analysis=lcurve_config.enable_hessian_analysis,
-    hessian_analysis_every=lcurve_config.hessian_analysis_every,
     hessian_n_eigs=lcurve_config.hessian_n_eigs,
-    kernel_probe_count=lcurve_config.kernel_probe_count,
     analysis_tol=lcurve_config.analysis_tol,
 )
 elapsed_time_rerun = time.time() - start_time_rerun
@@ -147,13 +209,10 @@ print(f"  Converged: {results['converged']}")
 print(f"  Iterations: {results['n_iterations']}")
 print(f"  Final cost: {results['final_cost']:.6e}")
 print(f"  Message: {results['message']}")
+data_diagnostics = results.get("final_data_hessian_diagnostics")
 diagnostics = results.get("final_hessian_diagnostics")
-if diagnostics is not None:
-    print(f"  Hessian lambda_min: {diagnostics['lambda_min']:.6e}")
-    print(f"  Hessian lambda_max: {diagnostics['lambda_max']:.6e}")
-    print(f"  Hessian cond: {diagnostics['condition_number']:.6e}")
-    print(f"  Hessian near-nullspace detected: {diagnostics['near_nullspace_detected']}")
-    print(f"  Hessian negative curvature detected: {diagnostics['has_negative_curvature']}")
+_print_hessian_summary("Data Hessian J_E^T M J_E", data_diagnostics)
+_print_hessian_summary("Regularized Hessian J_E^T M J_E + gamma G", diagnostics)
 print(f"\nReconstruction Errors:")
 print(f"  MAE: {errors['mae']:.4f}%")
 print(f"  Max error: {errors['max_error']:.4f}%")
@@ -257,9 +316,7 @@ config_snapshot_path = write_python_config_snapshot(
                 "GTOL": inverse_config.gtol,
                 "NOISE_LEVELS": inverse_config.noise_levels,
                 "ENABLE_HESSIAN_ANALYSIS": inverse_config.enable_hessian_analysis,
-                "HESSIAN_ANALYSIS_EVERY": inverse_config.hessian_analysis_every,
                 "HESSIAN_N_EIGS": inverse_config.hessian_n_eigs,
-                "KERNEL_PROBE_COUNT": inverse_config.kernel_probe_count,
                 "ANALYSIS_TOL": inverse_config.analysis_tol,
             },
         ),
@@ -270,20 +327,15 @@ config_snapshot_path = write_python_config_snapshot(
                 "GAMMA_MAX": lcurve_config.gamma_max,
                 "N_GAMMA": lcurve_config.n_gamma,
                 "ENABLE_HESSIAN_ANALYSIS": lcurve_config.enable_hessian_analysis,
-                "HESSIAN_ANALYSIS_EVERY": lcurve_config.hessian_analysis_every,
                 "HESSIAN_N_EIGS": lcurve_config.hessian_n_eigs,
-                "KERNEL_PROBE_COUNT": lcurve_config.kernel_probe_count,
                 "ANALYSIS_TOL": lcurve_config.analysis_tol,
             },
         ),
         (
             "Ill-Posedness Diagnostics",
             {
-                "HESSIAN_LAMBDA_MIN": None if diagnostics is None else float(diagnostics["lambda_min"]),
-                "HESSIAN_LAMBDA_MAX": None if diagnostics is None else float(diagnostics["lambda_max"]),
-                "HESSIAN_CONDITION_NUMBER": None if diagnostics is None else float(diagnostics["condition_number"]),
-                "HESSIAN_NEAR_NULLSPACE_DETECTED": None if diagnostics is None else bool(diagnostics["near_nullspace_detected"]),
-                "HESSIAN_NEGATIVE_CURVATURE_DETECTED": None if diagnostics is None else bool(diagnostics["has_negative_curvature"]),
+                **_diagnostics_snapshot_entries("DATA_HESSIAN", data_diagnostics),
+                **_diagnostics_snapshot_entries("TOTAL_HESSIAN", diagnostics),
             },
         ),
     ],
@@ -341,4 +393,7 @@ print(f"Results saved to {noise_output_dir}")
 print(f"Optimal gamma: {gamma_optimal:.6e}")
 print("=" * 70)
 
-plt.show()
+if 'agg' in plt.get_backend().lower():
+    plt.close('all')
+else:
+    plt.show()

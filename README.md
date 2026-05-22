@@ -52,9 +52,7 @@ The main defaults are defined in `config.py`, which now returns typed configurat
 Relevant inverse-analysis defaults in `config.py` are:
 
 - `ENABLE_HESSIAN_ANALYSIS = True`
-- `HESSIAN_ANALYSIS_EVERY = 0`
 - `HESSIAN_N_EIGS = 6`
-- `KERNEL_PROBE_COUNT = 3`
 - `ANALYSIS_TOL = 1e-10`
 
 ## Typical Workflow
@@ -155,7 +153,7 @@ Most plotting utilities automatically search for the most recently modified resu
 | File | Purpose |
 | --- | --- |
 | `fgm_asm/__init__.py` | Package export surface for the main solver utilities. |
-| `fgm_asm/config_types.py` | Dataclass-based configuration contracts for forward, inverse, and L-curve workflows, including reduced-Hessian analysis controls, plus coercion helpers for backward-compatible loading. |
+| `fgm_asm/config_types.py` | Dataclass-based configuration contracts for forward, inverse, and L-curve workflows, including reduced-Hessian analysis controls and config coercion helpers. |
 | `fgm_asm/mesh.py` | Structured mesh generation, quadrature shape functions, sparse indexing, cached geometry-only FE data, mass-matrix assembly, regularization-matrix assembly, body-force loading, and `setup_boundary_conditions`. |
 | `fgm_asm/material.py` | Material container class and utilities for generating bilinear or exponential FGM modulus fields. |
 | `fgm_asm/fem_forward.py` | FE assembly and forward/adjoint linear solves with reusable stiffness-factorization support. |
@@ -202,14 +200,19 @@ In the current displacement-controlled inverse workflow, the optimization variab
 `Ehat = exp(raw) / mean(exp(raw))`. The absolute modulus scale is not optimized directly; it is
 recovered afterward from the measured tensile-end reaction force.
 
-The final rerun result now also contains a `final_hessian_diagnostics` dictionary with:
+The final rerun result now also contains:
+
+- `final_data_hessian_diagnostics` for `J_E^T M J_E`
+- `final_hessian_diagnostics` for `J_E^T M J_E + gamma G`
+
+Each dictionary includes:
 
 - `lambda_min`
 - `lambda_max`
 - `condition_number`
-- `is_locally_strictly_positive`
+- `is_positive_definite`
 - `smallest_eigenvalues`
-- `kernel_probes`
+- `smallest_eigenpair_summaries`
 
 ### `inverse_main.py`
 
@@ -244,7 +247,7 @@ The comparison plot is useful when you want to see whether warm-start continuati
 - `forward_job.py` saves figures without blocking on an interactive Matplotlib window.
 - `inverse_l_curve.py` processes one noise value per run. If `config.py` provides multiple values, the script currently uses the first one.
 - In the current displacement-controlled inverse workflow, the adjoint problem uses homogeneous Dirichlet conditions on prescribed-displacement DOFs rather than reusing the forward loading values.
-- With `HESSIAN_ANALYSIS_EVERY = 0`, reduced-Hessian analysis is performed only at the final iterate. This is the recommended default because intermediate spectral checks are much more expensive.
+- Reduced-Hessian analysis is performed only at the final iterate because the explicit spectral assembly is expensive.
 - Plotting scripts rely on saved pickle files rather than rerunning the solver.
 - Result files are stored as Python pickle objects, which is convenient for internal reuse but not intended as a stable interchange format.
 - Loading mode: displacement-controlled linear elasticity under small strain.
