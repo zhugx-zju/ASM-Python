@@ -28,7 +28,9 @@ def lambda_distance(fem_info, forw_U=None, U_measured=None, rhs=None):
         mesh_info = fem_info.mesh_info
         if mesh_info.M is None:
             mesh_info.assemble_mass_matrix()
-        rhs = np.asarray(mesh_info.M @ (forw_U - U_measured)).ravel()
+        # Match the discrete adjoint equation in the derivation:
+        # K lambda = -M (U - U_measured).
+        rhs = np.asarray(- mesh_info.M @ (forw_U - U_measured)).ravel()
     # The adjoint problem uses homogeneous Dirichlet conditions on the
     # prescribed displacement boundary, not the forward loading values.
     return solve_system(fem_info, rhs, prescribed_values=np.zeros(fem_info.mesh_info.n_dof, dtype=float))
@@ -62,7 +64,7 @@ def get_stiffness_gradient(fem_info, lambda_vec, forw_U):
         directional_term = np.einsum('ea,eab,eb->e', lambda_ele, BD0B, forw_U_ele)
         grad_E += (mesh_info.gauss_w[ig] * directional_term)[:, None] * mesh_info.gauss_N[ig][None, :]
 
-    return -np.bincount(id_list, weights=grad_E.T.ravel(), minlength=mesh_info.n_nod)
+    return np.bincount(id_list, weights=grad_E.T.ravel(), minlength=mesh_info.n_nod)
 
 
 def _raw_to_ehat(raw_vec):
@@ -156,7 +158,7 @@ def _evaluate_inverse_state(mesh_info, bc_info, U_measured, material_info, gamma
     reg_value = get_tikhonov_regularization(mesh_info, material_info)
     cost_reg = 0.5 * gamma * reg_value
 
-    lambda_vec = lambda_distance(fem_info, rhs=-mass_residual)
+    lambda_vec = lambda_distance(fem_info, rhs=mass_residual)
     grad_tar_ehat = get_stiffness_gradient(fem_info, lambda_vec, forw_U)
     grad_reg_ehat = 0.5 * gamma * get_tikhonov_gradient(mesh_info, material_info)
     grad_ehat = grad_tar_ehat + grad_reg_ehat
