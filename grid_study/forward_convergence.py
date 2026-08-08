@@ -352,7 +352,7 @@ def _plot_profile_panel(
         transform=ax.transAxes,
         ha="left",
         va="bottom",
-        fontsize=12,
+        fontsize=14,
         clip_on=False,
     )
 
