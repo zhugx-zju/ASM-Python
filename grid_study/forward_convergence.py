@@ -18,6 +18,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import rcParams
+from matplotlib.ticker import FuncFormatter, LogFormatterMathtext, MaxNLocator, MultipleLocator
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
 from scipy.interpolate import RegularGridInterpolator
 
@@ -34,8 +35,8 @@ MESH_COLORS = {
     10: "#E69F00",
     20: "#009E73",
     40: "#D55E00",
-    80: "#CC79A7",
-    100: "#222222",
+    80: "#7A5195",
+    100: "#111111",
 }
 MESH_MARKERS = {
     4: "o",
@@ -45,9 +46,17 @@ MESH_MARKERS = {
     80: "P",
     100: "X",
 }
+MESH_LINESTYLES = {
+    4: "-",
+    10: "--",
+    20: "-.",
+    40: ":",
+    80: (0, (7, 2, 1, 2)),
+    100: (0, (1, 1)),
+}
 DATASET_STYLES = {
-    "bil": {"color": "#0072B2", "marker": "o"},
-    "exp": {"color": "#D55E00", "marker": "s"},
+    "bil": {"color": "#0072B2", "marker": "o", "linestyle": "-"},
+    "exp": {"color": "#D55E00", "marker": "s", "linestyle": "--"},
 }
 
 rcParams["font.family"] = "serif"
@@ -56,6 +65,28 @@ rcParams["mathtext.fontset"] = "custom"
 rcParams["mathtext.rm"] = "Times New Roman"
 rcParams["mathtext.it"] = "Times New Roman:italic"
 rcParams["axes.linewidth"] = 1.2
+
+
+def _compact_tick(value: float, _position: int) -> str:
+    """Format ticks without trailing zeros or unnecessary decimal places."""
+    if abs(value) < 1e-12:
+        return "0"
+    return f"{value:g}"
+
+
+def _style_axes(ax) -> None:
+    ax.grid(False)
+    ax.tick_params(
+        axis="both",
+        which="both",
+        direction="in",
+        top=True,
+        right=True,
+        width=1.1,
+        length=5,
+    )
+    ax.xaxis.set_major_formatter(FuncFormatter(_compact_tick))
+    ax.yaxis.set_major_formatter(FuncFormatter(_compact_tick))
 
 
 def _relative_l1(a: np.ndarray, b: np.ndarray) -> float:
@@ -190,6 +221,7 @@ def _plot_metrics(rows: list[dict], output_dir: Path) -> tuple[Path, Path]:
             error_values,
             color=style["color"],
             marker=style["marker"],
+            linestyle=style["linestyle"],
             linewidth=1.8,
             markersize=4.5,
             label=dataset.upper(),
@@ -199,19 +231,18 @@ def _plot_metrics(rows: list[dict], output_dir: Path) -> tuple[Path, Path]:
             [row["elapsed_time_seconds"] for row in subset],
             color=style["color"],
             marker=style["marker"],
+            linestyle=style["linestyle"],
             linewidth=1.8,
             markersize=4.5,
             label=dataset.upper(),
         )
 
     axes[0].set_xlabel("Nodes per direction")
-    axes[0].set_ylabel("Relative L2 displacement difference to finest mesh")
+    axes[0].set_ylabel("Relative L2 difference to 100 x 100 mesh")
     axes[0].set_xscale("log", base=2)
     axes[0].set_yscale("log")
     axes[0].set_xticks(plot_nodes)
     axes[0].set_xticklabels([str(nodes) for nodes in plot_nodes])
-    axes[0].grid(True, which="both", alpha=0.3)
-    axes[0].legend(fontsize=9, frameon=True, edgecolor="black", facecolor="white")
 
     axes[1].set_xlabel("Nodes per direction")
     axes[1].set_ylabel("Forward solve time (s)")
@@ -219,11 +250,23 @@ def _plot_metrics(rows: list[dict], output_dir: Path) -> tuple[Path, Path]:
     axes[1].set_xticks(plot_nodes)
     axes[1].set_xticklabels([str(nodes) for nodes in plot_nodes])
     axes[1].set_yscale("log")
-    axes[1].grid(True, which="both", alpha=0.3)
-    axes[1].legend(fontsize=9, frameon=True, edgecolor="black", facecolor="white")
-
-    fig.suptitle("ASM Forward Mesh Convergence")
-    fig.tight_layout(pad=1.2)
+    for ax in axes:
+        _style_axes(ax)
+    axes[0].yaxis.set_major_formatter(LogFormatterMathtext())
+    axes[1].yaxis.set_major_formatter(LogFormatterMathtext())
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(
+        handles,
+        labels,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.99),
+        ncol=2,
+        fontsize=10,
+        frameon=False,
+        handlelength=2.5,
+        columnspacing=1.8,
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.91), pad=1.2)
     png_path = output_dir / "forward_grid_convergence.png"
     pdf_path = output_dir / "forward_grid_convergence.pdf"
     fig.savefig(png_path, dpi=300, bbox_inches="tight")
@@ -253,46 +296,47 @@ def _plot_single_edge_profile(
     """Plot one component for one material field with all mesh curves."""
     fig, ax = plt.subplots(figsize=(8.2, 6.0))
     profiles = []
+    displacement_scale = 1e3
 
     for nodes in nodes_list:
         case = cases[nodes]
-        profile = _interpolate_edge_profile(case[component], case["mesh"], y_values)
+        profile = (
+            _interpolate_edge_profile(case[component], case["mesh"], y_values)
+            * displacement_scale
+        )
         profiles.append(profile)
         ax.plot(
             y_values,
             profile,
             color=MESH_COLORS.get(nodes, "#444444"),
             marker=MESH_MARKERS.get(nodes, "o"),
+            linestyle=MESH_LINESTYLES.get(nodes, "-"),
             markevery=max(1, len(y_values) // 12),
             linewidth=1.8,
             markersize=4.5,
             markerfacecolor="white",
             markeredgewidth=0.9,
             solid_capstyle="round",
-            label=f"{nodes} nodes",
+            label=f"{nodes} x {nodes} nodes",
         )
 
-    ax.set_xlabel(r"$y$", fontsize=16)
-    ax.set_ylabel(rf"${component[0]}_{{{component[1:]}}}$", fontsize=16)
-    ax.set_title(
-        rf"{dataset.upper()} modulus field: ${component[0]}_{{{component[1:]}}}$ along $x=L$",
-        fontsize=15,
-        pad=10,
-    )
-    ax.tick_params(axis="both", labelsize=12, width=1.1)
-    ax.grid(True, alpha=0.22, linewidth=0.8)
+    ax.set_xlabel(r"$y$ (mm)", fontsize=16)
+    ax.set_ylabel(rf"${component[0]}_{{{component[1:]}}}$ ($10^{{-3}}$ mm)", fontsize=16)
+    ax.set_xlim(float(y_values[0]), float(y_values[-1]))
+    ax.xaxis.set_major_locator(MultipleLocator(2))
+    ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
+    _style_axes(ax)
+    ax.tick_params(axis="both", labelsize=12)
     ax.legend(
         loc="upper center",
-        bbox_to_anchor=(0.5, -0.18),
-        ncol=3,
-        fontsize=9,
-        frameon=True,
-        edgecolor="black",
-        facecolor="white",
-        framealpha=0.92,
-        handlelength=2.2,
-        columnspacing=1.1,
-        borderpad=0.55,
+        bbox_to_anchor=(0.5, 1.0),
+        ncol=2,
+        fontsize=10,
+        frameon=False,
+        handlelength=2.5,
+        columnspacing=1.5,
+        handletextpad=0.5,
+        labelspacing=0.4,
     )
 
     # Add a small zoom around the location where mesh curves differ most.
@@ -303,6 +347,8 @@ def _plot_single_edge_profile(
     y_width = max(float(y_values[-1] - y_values[0]) * 0.22, 1e-6)
     x_low = max(float(y_values[0]), y_center - y_width / 2.0)
     x_high = min(float(y_values[-1]), y_center + y_width / 2.0)
+    x_low = max(float(y_values[0]), np.floor(x_low * 2.0) / 2.0)
+    x_high = min(float(y_values[-1]), np.ceil(x_high * 2.0) / 2.0)
     focus_mask = (y_values >= x_low) & (y_values <= x_high)
     focus_values = profile_matrix[:, focus_mask]
     value_low = float(np.min(focus_values))
@@ -319,15 +365,17 @@ def _plot_single_edge_profile(
         )
     inset.set_xlim(x_low, x_high)
     inset.set_ylim(value_low - value_pad, value_high + value_pad)
+    inset.xaxis.set_major_locator(MultipleLocator(0.5))
+    inset.yaxis.set_major_locator(MaxNLocator(nbins=3))
+    _style_axes(inset)
     # Keep the zoom scale readable without colliding with the main y-axis.
-    inset.tick_params(axis="x", labelsize=8, width=0.8)
-    inset.tick_params(axis="y", labelleft=False, width=0.8)
-    inset.grid(True, alpha=0.18, linewidth=0.5)
+    inset.tick_params(axis="both", labelsize=8, width=0.8, length=3)
+    inset.tick_params(axis="y", labelleft=False)
     mark_inset(ax, inset, loc1=2, loc2=4, fc="none", ec="black", lw=0.8)
 
     # The inset is positioned in axes coordinates, so explicit margins keep
     # the single-axis figure stable without tight_layout warnings.
-    fig.subplots_adjust(left=0.13, right=0.98, bottom=0.25, top=0.88)
+    fig.subplots_adjust(left=0.13, right=0.98, bottom=0.13, top=0.96)
     stem = f"forward_edge_{dataset}_{component.lower()}"
     png_path = output_dir / f"{stem}.png"
     pdf_path = output_dir / f"{stem}.pdf"
