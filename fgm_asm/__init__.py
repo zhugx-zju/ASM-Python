@@ -8,6 +8,7 @@ A finite element analysis package for:
 """
 
 from .mesh import MeshInfo, shape_fun_at_gauss, get_body_force_load
+from .grf import generate_grf_field
 from .material import MaterialInfo, generate_fgm_modulus
 from .fem_forward import fem_assemble, forward_solver, compute_reaction_forces, compute_tensile_end_force
 from .regularization import get_tikhonov_regularization, get_tikhonov_gradient
@@ -46,6 +47,7 @@ __all__ = [
     # Material
     'MaterialInfo',
     'generate_fgm_modulus',
+    'generate_grf_field',
     # Forward solver
     'fem_assemble',
     'forward_solver',

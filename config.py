@@ -28,8 +28,14 @@ NU = 0.3        # Poisson's ratio
 # Load condition
 disp_amp = 0.001 * GEO_L     # Prescribed x-displacement on the right edge
 
-# Distribution type: 'bil' (bilinear) or 'exp' (exponential)
+# Distribution type: 'bil' (bilinear), 'exp' (exponential), or 'grf'
 DIS_TYPE = 'bil'
+
+# Gaussian random field parameters (used when DIS_TYPE = 'grf')
+GRF_E_MAX = 8.0
+GRF_SIGMA_G = 1.0
+GRF_ELL = 1.0
+GRF_SEED = 42
 
 
 # ============================================================
@@ -73,6 +79,10 @@ def get_forward_config():
         Ey=EY,
         nu=NU,
         dis_type=DIS_TYPE,
+        grf_E_max=GRF_E_MAX,
+        grf_sigma_g=GRF_SIGMA_G,
+        grf_ell=GRF_ELL,
+        grf_seed=GRF_SEED,
     )
 
 

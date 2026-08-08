@@ -14,7 +14,7 @@ from .config_types import coerce_forward_config
 FORWARD_DATA_FILENAME = "forward_problem_data.pkl"
 INVERSE_RESULTS_FILENAME = "inverse_results.pkl"
 LCURVE_ANALYSIS_FILENAME = "lcurve_analysis.pkl"
-RESULTS_FOLDER_GLOB = "Geo_*_Mesh_*_Alpha_*_Beta_*_Gamma_*"
+RESULTS_FOLDER_GLOB = "Geo_*_Mesh_*"
 LEGACY_FORWARD_DIR = "forward_results"
 LEGACY_INVERSE_DIR = "inverse_results"
 LEGACY_LCURVE_DIR = "inverse_results_lbfgs_lcurve"
