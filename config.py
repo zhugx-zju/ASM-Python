@@ -26,8 +26,14 @@ EX = 2.0        # Modulus ratio at x = geo_l
 EY = 0.5        # Modulus ratio at y = geo_h
 NU = 0.3        # Poisson's ratio
 
-# Distribution type: 'bil' (bilinear) or 'exp' (exponential)
+# Distribution type: 'bil' (bilinear), 'exp' (exponential), or 'grf'
 DIS_TYPE = 'bil'
+
+# Gaussian random field parameters (used when DIS_TYPE = 'grf')
+GRF_E_MAX = 8.0
+GRF_SIGMA_G = 1.0
+GRF_ELL = 1.0
+GRF_SEED_MAX = 42
 
 
 # ============================================================
@@ -71,6 +77,10 @@ def get_forward_config():
         Ey=EY,
         nu=NU,
         dis_type=DIS_TYPE,
+        grf_E_max=GRF_E_MAX,
+        grf_sigma_g=GRF_SIGMA_G,
+        grf_ell=GRF_ELL,
+        grf_seed_max=GRF_SEED_MAX,
     )
 
 

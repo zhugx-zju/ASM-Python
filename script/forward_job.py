@@ -31,6 +31,11 @@ print(f"  Geometry: {config.geo_l:.1f} x {config.geo_h:.1f}")
 print(f"  Mesh: {config.nel_x} x {config.nel_y} elements")
 print(f"  Distribution type: {config.dis_type}")
 print(f"  Ex: {config.Ex:.2f}, Ey: {config.Ey:.2f}")
+if config.dis_type.lower() == "grf":
+    print(f"  GRF E_max: {config.grf_E_max:.2f}")
+    print(f"  GRF sigma_g: {config.grf_sigma_g:.2f}")
+    print(f"  GRF ell: {config.grf_ell:.2f}")
+    print(f"  GRF seed: {config.grf_seed_max}")
 
 
 # ============================================================
@@ -51,11 +56,16 @@ E_field, material_info = generate_fgm_modulus(
     mesh_info,
     dis_type=config.dis_type,
     Ex=config.Ex,
-    Ey=config.Ey
+    Ey=config.Ey,
+    grf_E_max=config.grf_E_max,
+    grf_sigma_g=config.grf_sigma_g,
+    grf_ell=config.grf_ell,
+    grf_seed_max=config.grf_seed_max,
 )
 material_info.nu = config.nu
-print(f"  Alpha: {material_info.alpha:.6f}")
-print(f"  Beta: {material_info.beta:.6f}")
+if config.dis_type.lower() in {"bil", "exp"}:
+    print(f"  Alpha: {material_info.alpha:.6f}")
+    print(f"  Beta: {material_info.beta:.6f}")
 print(f"  E range: [{E_field.min():.4f}, {E_field.max():.4f}]")
 
 # Update material info with initial modulus

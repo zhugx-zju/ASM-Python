@@ -32,7 +32,7 @@ See [docs/branch_scope.md](docs/branch_scope.md) for the lightweight branch rule
 - Geometry: rectangular 2D domain
 - Elements: 4-node bilinear quadrilateral elements
 - Integration: 2x2 Gauss quadrature
-- Material field: nodal Young's modulus with either bilinear or exponential spatial variation
+- Material field: nodal Young's modulus with bilinear, exponential, or Gaussian random-field variation
 - Boundary conditions: left edge constrained, distributed load applied on the right edge
 - Inverse objective: displacement misfit plus Tikhonov smoothness regularization on the modulus field
 
@@ -60,6 +60,7 @@ The main defaults are defined in `config.py`, which now returns typed configurat
 - Poisson ratio: `0.3`
 - modulus targets: `Ex = 2.0`, `Ey = 0.5`
 - distribution type: `bil`
+- GRF defaults (used when `DIS_TYPE = 'grf'`): `E_max = 8.0`, `sigma_g = 1.0`, `ell = 1.0`, `seed = 42`
 - default regularization parameter: `1e-6`
 
 ## Typical Workflow
@@ -144,7 +145,7 @@ write and search the same root-level case folders even when launched with
 
 | File | Purpose |
 | --- | --- |
-| `config.py` | Central configuration entry point for forward, inverse, and L-curve runs. It now returns typed config objects instead of loose dictionaries. |
+| `config.py` | Central configuration entry point for forward, inverse, and L-curve runs, including GRF parameters. It now returns typed config objects instead of loose dictionaries. |
 | `script/forward_job.py` | Main forward-analysis entry point. Generates the mesh, builds the modulus field, applies boundary conditions, solves the FE system, and saves data and plots. |
 | `script/inverse_main.py` | Single-gamma inverse solver entry point based on the shared SciPy L-BFGS-B implementation in `fgm_asm/inverse_solver.py`. Saves results into noise-specific subdirectories. |
 | `script/inverse_l_curve.py` | Inverse solver entry point using SciPy L-BFGS-B together with L-curve based gamma selection, followed by a fresh rerun from the default initialization using the selected `gamma`. |
@@ -162,7 +163,8 @@ write and search the same root-level case folders even when launched with
 | `fgm_asm/__init__.py` | Package export surface for the main solver utilities. |
 | `fgm_asm/config_types.py` | Dataclass-based configuration contracts for forward, inverse, and L-curve workflows, plus coercion helpers for backward-compatible loading. |
 | `fgm_asm/mesh.py` | Structured mesh generation, quadrature shape functions, sparse indexing, cached geometry-only FE data, mass-matrix assembly, regularization-matrix assembly, body-force loading, and `setup_boundary_conditions`. |
-| `fgm_asm/material.py` | Material container class and utilities for generating bilinear or exponential FGM modulus fields. |
+| `fgm_asm/material.py` | Material container class and utilities for generating bilinear, exponential, or GRF modulus fields. |
+| `fgm_asm/grf.py` | Reproducible RBF Gaussian random-field generation on structured meshes. |
 | `fgm_asm/fem_forward.py` | FE assembly and forward/adjoint linear solves with reusable stiffness-factorization support. |
 | `fgm_asm/regularization.py` | Matrix-based Tikhonov regularization value and gradient with respect to nodal modulus variables. |
 | `fgm_asm/inverse_solver.py` | Adjoint-based gradient terms and the shared SciPy L-BFGS-B inverse solver with cached objective-state reuse. |
@@ -183,6 +185,29 @@ write and search the same root-level case folders even when launched with
 5. assembles the FE system and solves for displacement
 6. saves the results as a pickle file
 7. exports forward-result figures
+
+Set `DIS_TYPE = 'grf'` in `config.py` to use the Gaussian random-field material
+generator. The Python implementation follows `GRF_Generate.m`: it uses a
+squared-exponential RBF covariance, `tanh` normalization to `[0, E_max]`, and
+a reproducible seed. Because ASM uses a tensor-product rectangular mesh, the
+RBF covariance is sampled through separable one-dimensional Cholesky factors;
+this avoids constructing the dense pairwise covariance matrix used by the
+reference MATLAB implementation and keeps fine meshes practical.
+
+The public API is:
+
+```python
+from fgm_asm import generate_grf_field
+
+fields, E_max_vec = generate_grf_field(
+    mesh_info,
+    num=10,
+    E_max=8.0,
+    sigma_g=1.0,
+    ell=1.0,
+    seed_max=42,
+)
+```
 
 ## Inverse Problem Options
 
