@@ -88,8 +88,8 @@ def _style_axes(ax) -> None:
         axis="both",
         which="both",
         direction="in",
-        top=True,
-        right=True,
+        top=False,
+        right=False,
         width=0.9,
         length=4.5,
     )
@@ -366,7 +366,7 @@ def _plot_profile_panel(
     value_high = float(np.max(focus_values))
     value_pad = max((value_high - value_low) * 0.12, np.finfo(float).eps)
 
-    inset = inset_axes(ax, width="38%", height="34%", loc=inset_loc, borderpad=1.4)
+    inset = inset_axes(ax, width="30%", height="28%", loc=inset_loc, borderpad=1.2)
     for nodes, profile in zip(nodes_list, profiles):
         inset.plot(
             y_values,
@@ -406,8 +406,8 @@ def _plot_edge_dataset(
     """Write one two-panel ux/uy profile figure for a material field."""
     fig, axes = plt.subplots(1, 2, figsize=(13.2, 5.6), sharex=True)
     panel_specs = (
-        ("ux", "lower left", (2, 4), "a"),
-        ("uy", "upper left", (1, 4), "b"),
+        ("ux", "lower right", (1, 4), "a"),
+        ("uy", "lower left", (2, 3), "b"),
     )
     handles = labels = None
     for ax, (component, inset_loc, connector_locs, panel_label) in zip(axes, panel_specs):
