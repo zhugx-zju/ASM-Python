@@ -10,6 +10,7 @@ import time
 import tracemalloc
 import numpy as np
 
+from script import REPO_ROOT
 from fgm_asm import lbfgs_inverse_solver_scipy
 from fgm_asm.results_io import get_noise_output_dir, save_inverse_results, write_python_config_snapshot
 from fgm_asm.utils import add_noise_to_displacement, compute_errors
@@ -24,7 +25,7 @@ print("SciPy L-BFGS-B with Tikhonov Regularization")
 print("=" * 70)
 
 print("\nSearching for forward problem data...")
-forward_data_path, forward_data = load_latest_forward_problem()
+forward_data_path, forward_data = load_latest_forward_problem(REPO_ROOT)
 
 mesh_info = forward_data["mesh_info"]
 bc_info = forward_data["bc_info"]
