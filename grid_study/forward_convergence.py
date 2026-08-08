@@ -18,8 +18,16 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import rcParams
+from matplotlib.lines import Line2D
 from matplotlib.patches import ConnectionPatch, Rectangle
-from matplotlib.ticker import FuncFormatter, LogFormatterMathtext, MaxNLocator, MultipleLocator
+from matplotlib.ticker import (
+    FormatStrFormatter,
+    FuncFormatter,
+    LogFormatterMathtext,
+    LogLocator,
+    MaxNLocator,
+    MultipleLocator,
+)
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from scipy.interpolate import RegularGridInterpolator
 
@@ -65,7 +73,7 @@ MESH_LINEWIDTHS = {
 }
 DATASET_STYLES = {
     "bil": {"color": "#1f77b4", "marker": "o", "linestyle": "-"},
-    "exp": {"color": "#d62728", "marker": "s", "linestyle": "--"},
+    "exp": {"color": "#ff7f0e", "marker": "s", "linestyle": "--"},
 }
 
 rcParams["font.family"] = "serif"
@@ -215,7 +223,8 @@ def _write_metrics(rows: list[dict], output_dir: Path) -> Path:
 
 
 def _plot_metrics(rows: list[dict], output_dir: Path) -> tuple[Path, Path]:
-    fig, axes = plt.subplots(1, 2, figsize=(12, 4.8))
+    fig, error_ax = plt.subplots(figsize=(7.2, 6.4))
+    time_ax = error_ax.twinx()
     plot_nodes = sorted({int(row["nodes"]) for row in rows})
     for dataset in sorted({row["dataset"] for row in rows}):
         subset = sorted((row for row in rows if row["dataset"] == dataset), key=lambda r: r["nodes"])
@@ -225,57 +234,104 @@ def _plot_metrics(rows: list[dict], output_dir: Path) -> tuple[Path, Path]:
             row["relative_l2_u_to_reference"] if row["relative_l2_u_to_reference"] > 0 else np.nan
             for row in subset
         ]
-        axes[0].plot(
+        error_ax.plot(
             nodes,
             error_values,
             color=style["color"],
             marker=style["marker"],
-            linestyle=style["linestyle"],
+            linestyle="-",
             linewidth=1.8,
             markersize=4.5,
-            label=dataset.upper(),
         )
-        axes[1].plot(
+        time_ax.plot(
             nodes,
             [row["elapsed_time_seconds"] for row in subset],
             color=style["color"],
             marker=style["marker"],
-            linestyle=style["linestyle"],
+            linestyle="--",
             linewidth=1.8,
             markersize=4.5,
-            label=dataset.upper(),
         )
 
-    axes[0].set_xlabel("Nodes per direction")
-    axes[0].set_ylabel("Relative L2 difference to 100 x 100 mesh")
-    axes[0].set_xscale("log", base=2)
-    axes[0].set_yscale("log")
-    axes[0].set_xticks(plot_nodes)
-    axes[0].set_xticklabels([str(nodes) for nodes in plot_nodes])
+    error_ax.set_xlabel("Nodes per direction")
+    error_ax.set_ylabel("Relative L2 difference to 100 x 100 mesh")
+    error_ax.set_xscale("log", base=2)
+    error_ax.set_yscale("log")
+    error_ax.set_xticks(plot_nodes)
+    error_ax.set_xticklabels([str(nodes) for nodes in plot_nodes])
+    error_ax.set_box_aspect(1.0)
 
-    axes[1].set_xlabel("Nodes per direction")
-    axes[1].set_ylabel("Forward solve time (s)")
-    axes[1].set_xscale("log", base=2)
-    axes[1].set_xticks(plot_nodes)
-    axes[1].set_xticklabels([str(nodes) for nodes in plot_nodes])
-    axes[1].set_yscale("log")
-    for ax in axes:
-        _style_axes(ax)
-    axes[0].yaxis.set_major_formatter(LogFormatterMathtext())
-    axes[1].yaxis.set_major_formatter(LogFormatterMathtext())
-    handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(
-        handles,
-        labels,
+    time_ax.set_ylabel("Forward solve time (s)")
+    time_ax.set_yscale("log", base=10)
+    time_ax.set_box_aspect(1.0)
+
+    _style_axes(error_ax)
+    _style_axes(time_ax)
+    error_ax.yaxis.set_major_formatter(LogFormatterMathtext())
+    time_ax.yaxis.set_major_formatter(LogFormatterMathtext())
+    time_ax.yaxis.set_major_locator(LogLocator(base=10))
+    time_ax.yaxis.set_minor_locator(LogLocator(base=10, subs=np.arange(2, 10) * 0.1))
+    time_ax.tick_params(axis="x", bottom=False, labelbottom=False)
+    time_ax.tick_params(axis="y", left=False, right=True, labelleft=False, labelright=True)
+    time_ax.spines["bottom"].set_visible(False)
+    time_ax.spines["left"].set_visible(False)
+
+    legend_handles = [
+        Line2D(
+            [0],
+            [0],
+            color=DATASET_STYLES["bil"]["color"],
+            marker=DATASET_STYLES["bil"]["marker"],
+            linestyle="-",
+            linewidth=1.8,
+            markersize=4.5,
+            label=r"BIL, relative $L_2$ error (solid)",
+        ),
+        Line2D(
+            [0],
+            [0],
+            color=DATASET_STYLES["exp"]["color"],
+            linestyle="-",
+            linewidth=1.8,
+            marker=DATASET_STYLES["exp"]["marker"],
+            markersize=4.5,
+            label=r"EXP, relative $L_2$ error (solid)",
+        ),
+        Line2D(
+            [0],
+            [0],
+            color=DATASET_STYLES["bil"]["color"],
+            marker=DATASET_STYLES["bil"]["marker"],
+            linestyle="--",
+            linewidth=1.8,
+            markersize=4.5,
+            label=r"BIL, forward solve time (dashed)",
+        ),
+        Line2D(
+            [0],
+            [0],
+            color=DATASET_STYLES["exp"]["color"],
+            linestyle="--",
+            linewidth=1.8,
+            marker=DATASET_STYLES["exp"]["marker"],
+            markersize=4.5,
+            label=r"EXP, forward solve time (dashed)",
+        ),
+    ]
+    error_ax.legend(
+        legend_handles,
+        [handle.get_label() for handle in legend_handles],
         loc="upper center",
-        bbox_to_anchor=(0.5, 0.99),
-        ncol=2,
-        fontsize=10,
+        bbox_to_anchor=(0.5, 0.97),
+        ncol=1,
+        fontsize=8.5,
         frameon=False,
-        handlelength=2.5,
-        columnspacing=1.8,
+        handlelength=3.0,
+        columnspacing=1.2,
+        handletextpad=0.5,
+        labelspacing=0.55,
     )
-    fig.tight_layout(rect=(0, 0, 1, 0.91), pad=1.2)
+    fig.subplots_adjust(left=0.16, right=0.84, bottom=0.14, top=0.96)
     png_path = output_dir / "forward_grid_convergence.png"
     pdf_path = output_dir / "forward_grid_convergence.pdf"
     fig.savefig(png_path, dpi=1200, bbox_inches="tight")
@@ -341,9 +397,14 @@ def _plot_profile_panel(
     profile_range = float(np.ptp(profile_matrix))
     profile_pad = max(profile_range * 0.06, np.finfo(float).eps)
     ax.set_ylim(float(np.min(profile_matrix)) - profile_pad, float(np.max(profile_matrix)) + profile_pad)
+    ax.set_box_aspect(1.0)
     ax.xaxis.set_major_locator(MultipleLocator(2))
-    ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
+    ax.yaxis.set_major_locator(
+        MultipleLocator(1.0 if component == "ux" else 0.5)
+    )
     _style_axes(ax)
+    ax.xaxis.set_major_formatter(FormatStrFormatter("%.0f"))
+    ax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
     ax.tick_params(axis="both", labelsize=10.5, width=0.9, length=4.5)
     ax.text(
         -0.12,
@@ -356,15 +417,11 @@ def _plot_profile_panel(
         clip_on=False,
     )
 
-    # Select a compact inset around the largest difference between meshes.
-    spread = np.ptp(profile_matrix, axis=0)
-    focus_index = int(np.argmax(spread))
-    y_center = float(y_values[focus_index])
-    y_width = max(float(y_values[-1] - y_values[0]) * 0.22, 1e-6)
-    x_low = max(float(y_values[0]), y_center - y_width / 2.0)
-    x_high = min(float(y_values[-1]), y_center + y_width / 2.0)
-    x_low = max(float(y_values[0]), np.floor(x_low * 2.0) / 2.0)
-    x_high = min(float(y_values[-1]), np.ceil(x_high * 2.0) / 2.0)
+    # Keep the highlighted data window clear of the panel edges.
+    if component == "ux":
+        x_low, x_high = 6.0, 7.0
+    else:
+        x_low, x_high = 1.5, 2.5
     focus_mask = (y_values >= x_low) & (y_values <= x_high)
     focus_values = profile_matrix[:, focus_mask]
     value_low = float(np.min(focus_values))
@@ -374,7 +431,7 @@ def _plot_profile_panel(
     inset = inset_axes(
         ax,
         width="26%",
-        height="28%",
+        height="26%",
         loc="lower left",
         bbox_to_anchor=(*inset_anchor, 1.0, 1.0),
         bbox_transform=ax.transAxes,
@@ -391,10 +448,17 @@ def _plot_profile_panel(
     inset.set_xlim(x_low, x_high)
     inset.set_ylim(value_low - value_pad, value_high + value_pad)
     inset.xaxis.set_major_locator(MultipleLocator(0.5))
-    inset.yaxis.set_major_locator(MaxNLocator(nbins=3))
+    inset.yaxis.set_major_locator(MaxNLocator(nbins=3, steps=[1, 2, 2.5, 5, 10]))
     _style_axes(inset)
-    inset.tick_params(axis="both", labelsize=8, width=0.7, length=3)
-    inset.tick_params(axis="y", labelleft=False)
+    inset.xaxis.set_major_formatter(FormatStrFormatter("%.1f"))
+    inset.yaxis.set_major_formatter(FormatStrFormatter("%.2f"))
+    inset.tick_params(
+        axis="both",
+        labelsize=8,
+        width=0.7,
+        length=3,
+        pad=2,
+    )
     for spine in inset.spines.values():
         spine.set_linewidth(1.1)
     zoom_y_low = value_low - value_pad
@@ -436,7 +500,7 @@ def _plot_edge_dataset(
     """Write one two-panel ux/uy profile figure for a material field."""
     fig, axes = plt.subplots(1, 2, figsize=(13.2, 5.6), sharex=True)
     panel_specs = (
-        ("ux", (0.46, 0.12), "a"),
+        ("ux", (0.50, 0.12), "a"),
         ("uy", (0.22, 0.12), "b"),
     )
     handles = labels = None
@@ -457,15 +521,15 @@ def _plot_edge_dataset(
         handles,
         labels,
         loc="center left",
-        bbox_to_anchor=(0.79, 0.5),
+        bbox_to_anchor=(0.76, 0.5),
         ncol=1,
-        fontsize=10,
+        fontsize=11.5,
         frameon=False,
-        handlelength=2.4,
+        handlelength=2.6,
         handletextpad=0.5,
         labelspacing=0.55,
     )
-    fig.subplots_adjust(left=0.09, right=0.77, bottom=0.16, top=0.93, wspace=0.28)
+    fig.subplots_adjust(left=0.10, right=0.76, bottom=0.16, top=0.93, wspace=0.30)
     stem = f"forward_edge_{dataset}"
     png_path = output_dir / f"{stem}.png"
     pdf_path = output_dir / f"{stem}.pdf"
