@@ -31,12 +31,12 @@ DEFAULT_DATASETS = ("bil", "exp")
 DEFAULT_NODES = (4, 10, 20, 40, 80, 100)
 
 MESH_COLORS = {
-    4: "#0072B2",
-    10: "#E69F00",
-    20: "#009E73",
-    40: "#D55E00",
-    80: "#7A5195",
-    100: "#111111",
+    4: "#1f77b4",
+    10: "#ff7f0e",
+    20: "#2ca02c",
+    40: "#d62728",
+    80: "#9467bd",
+    100: "#000000",
 }
 MESH_MARKERS = {
     4: "o",
@@ -51,12 +51,20 @@ MESH_LINESTYLES = {
     10: "--",
     20: "-.",
     40: ":",
-    80: (0, (7, 2, 1, 2)),
+    80: (0, (5, 1, 1, 1)),
     100: (0, (1, 1)),
 }
+MESH_LINEWIDTHS = {
+    4: 1.8,
+    10: 1.5,
+    20: 1.5,
+    40: 1.4,
+    80: 1.35,
+    100: 1.5,
+}
 DATASET_STYLES = {
-    "bil": {"color": "#0072B2", "marker": "o", "linestyle": "-"},
-    "exp": {"color": "#D55E00", "marker": "s", "linestyle": "--"},
+    "bil": {"color": "#1f77b4", "marker": "o", "linestyle": "-"},
+    "exp": {"color": "#d62728", "marker": "s", "linestyle": "--"},
 }
 
 rcParams["font.family"] = "serif"
@@ -64,7 +72,7 @@ rcParams["font.serif"] = ["Times New Roman"]
 rcParams["mathtext.fontset"] = "custom"
 rcParams["mathtext.rm"] = "Times New Roman"
 rcParams["mathtext.it"] = "Times New Roman:italic"
-rcParams["axes.linewidth"] = 1.2
+rcParams["axes.linewidth"] = 1.0
 
 
 def _compact_tick(value: float, _position: int) -> str:
@@ -82,8 +90,8 @@ def _style_axes(ax) -> None:
         direction="in",
         top=True,
         right=True,
-        width=1.1,
-        length=5,
+        width=0.9,
+        length=4.5,
     )
     ax.xaxis.set_major_formatter(FuncFormatter(_compact_tick))
     ax.yaxis.set_major_formatter(FuncFormatter(_compact_tick))
@@ -269,7 +277,7 @@ def _plot_metrics(rows: list[dict], output_dir: Path) -> tuple[Path, Path]:
     fig.tight_layout(rect=(0, 0, 1, 0.91), pad=1.2)
     png_path = output_dir / "forward_grid_convergence.png"
     pdf_path = output_dir / "forward_grid_convergence.pdf"
-    fig.savefig(png_path, dpi=300, bbox_inches="tight")
+    fig.savefig(png_path, dpi=1200, bbox_inches="tight")
     fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
     return png_path, pdf_path
@@ -285,18 +293,21 @@ def _write_edge_profiles(profile_rows: list[dict], output_dir: Path) -> Path:
     return path
 
 
-def _plot_single_edge_profile(
+def _plot_profile_panel(
+    ax,
     cases: dict[int, dict],
-    dataset: str,
     component: str,
     nodes_list: tuple[int, ...],
-    output_dir: Path,
     y_values: np.ndarray,
-) -> tuple[Path, Path]:
-    """Plot one component for one material field with all mesh curves."""
-    fig, ax = plt.subplots(figsize=(8.2, 6.0))
-    profiles = []
+    inset_loc: str,
+    connector_locs: tuple[int, int],
+    panel_label: str,
+) -> tuple[list, list]:
+    """Draw one displacement component and its local convergence inset."""
     displacement_scale = 1e3
+    profiles = []
+    handles = []
+    labels = []
 
     for nodes in nodes_list:
         case = cases[nodes]
@@ -305,41 +316,41 @@ def _plot_single_edge_profile(
             * displacement_scale
         )
         profiles.append(profile)
-        ax.plot(
+        (line,) = ax.plot(
             y_values,
             profile,
             color=MESH_COLORS.get(nodes, "#444444"),
             marker=MESH_MARKERS.get(nodes, "o"),
             linestyle=MESH_LINESTYLES.get(nodes, "-"),
-            markevery=max(1, len(y_values) // 12),
-            linewidth=1.8,
-            markersize=4.5,
+            markevery=max(1, len(y_values) // 8),
+            linewidth=MESH_LINEWIDTHS.get(nodes, 1.5),
+            markersize=4.0,
             markerfacecolor="white",
-            markeredgewidth=0.9,
+            markeredgewidth=0.8,
             solid_capstyle="round",
-            label=f"{nodes} x {nodes} nodes",
+            label=f"{nodes} × {nodes} nodes",
         )
+        handles.append(line)
+        labels.append(f"{nodes} × {nodes} nodes")
 
-    ax.set_xlabel(r"$y$ (mm)", fontsize=16)
-    ax.set_ylabel(rf"${component[0]}_{{{component[1:]}}}$ ($10^{{-3}}$ mm)", fontsize=16)
+    ax.set_xlabel(r"$y\; (\mathrm{mm})$", fontsize=14)
+    ax.set_ylabel(rf"${component[0]}_{{{component[1:]}}}\; (\times 10^{{-3}}\,\mathrm{{mm}})$", fontsize=14)
     ax.set_xlim(float(y_values[0]), float(y_values[-1]))
     ax.xaxis.set_major_locator(MultipleLocator(2))
     ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
     _style_axes(ax)
-    ax.tick_params(axis="both", labelsize=12)
-    ax.legend(
-        loc="upper center",
-        bbox_to_anchor=(0.5, 1.0),
-        ncol=2,
-        fontsize=10,
-        frameon=False,
-        handlelength=2.5,
-        columnspacing=1.5,
-        handletextpad=0.5,
-        labelspacing=0.4,
+    ax.tick_params(axis="both", labelsize=10.5, width=0.9, length=4.5)
+    ax.text(
+        0.03,
+        0.96,
+        f"({panel_label})",
+        transform=ax.transAxes,
+        ha="left",
+        va="top",
+        fontsize=12,
     )
 
-    # Add a small zoom around the location where mesh curves differ most.
+    # Select a compact inset around the largest difference between meshes.
     profile_matrix = np.asarray(profiles)
     spread = np.ptp(profile_matrix, axis=0)
     focus_index = int(np.argmax(spread))
@@ -355,31 +366,81 @@ def _plot_single_edge_profile(
     value_high = float(np.max(focus_values))
     value_pad = max((value_high - value_low) * 0.12, np.finfo(float).eps)
 
-    inset = inset_axes(ax, width="32%", height="31%", loc="lower left", borderpad=2.0)
+    inset = inset_axes(ax, width="38%", height="34%", loc=inset_loc, borderpad=1.4)
     for nodes, profile in zip(nodes_list, profiles):
         inset.plot(
             y_values,
             profile,
             color=MESH_COLORS.get(nodes, "#444444"),
-            linewidth=1.2,
+            linestyle=MESH_LINESTYLES.get(nodes, "-"),
+            linewidth=MESH_LINEWIDTHS.get(nodes, 1.5) * 0.7,
         )
     inset.set_xlim(x_low, x_high)
     inset.set_ylim(value_low - value_pad, value_high + value_pad)
     inset.xaxis.set_major_locator(MultipleLocator(0.5))
     inset.yaxis.set_major_locator(MaxNLocator(nbins=3))
     _style_axes(inset)
-    # Keep the zoom scale readable without colliding with the main y-axis.
-    inset.tick_params(axis="both", labelsize=8, width=0.8, length=3)
+    inset.tick_params(axis="both", labelsize=8, width=0.7, length=3)
     inset.tick_params(axis="y", labelleft=False)
-    mark_inset(ax, inset, loc1=2, loc2=4, fc="none", ec="black", lw=0.8)
+    for spine in inset.spines.values():
+        spine.set_linewidth(1.1)
+    mark_inset(
+        ax,
+        inset,
+        loc1=connector_locs[0],
+        loc2=connector_locs[1],
+        fc="none",
+        ec="black",
+        lw=0.7,
+    )
+    return handles, labels
 
-    # The inset is positioned in axes coordinates, so explicit margins keep
-    # the single-axis figure stable without tight_layout warnings.
-    fig.subplots_adjust(left=0.13, right=0.98, bottom=0.13, top=0.96)
-    stem = f"forward_edge_{dataset}_{component.lower()}"
+
+def _plot_edge_dataset(
+    cases: dict[int, dict],
+    dataset: str,
+    nodes_list: tuple[int, ...],
+    output_dir: Path,
+    y_values: np.ndarray,
+) -> tuple[Path, Path]:
+    """Write one two-panel ux/uy profile figure for a material field."""
+    fig, axes = plt.subplots(1, 2, figsize=(13.2, 5.6), sharex=True)
+    panel_specs = (
+        ("ux", "lower left", (2, 4), "a"),
+        ("uy", "upper left", (1, 4), "b"),
+    )
+    handles = labels = None
+    for ax, (component, inset_loc, connector_locs, panel_label) in zip(axes, panel_specs):
+        panel_handles, panel_labels = _plot_profile_panel(
+            ax,
+            cases,
+            component,
+            nodes_list,
+            y_values,
+            inset_loc,
+            connector_locs,
+            panel_label,
+        )
+        if handles is None:
+            handles, labels = panel_handles, panel_labels
+
+    fig.legend(
+        handles,
+        labels,
+        loc="upper left",
+        bbox_to_anchor=(0.79, 0.92),
+        ncol=1,
+        fontsize=10,
+        frameon=False,
+        handlelength=2.4,
+        handletextpad=0.5,
+        labelspacing=0.55,
+    )
+    fig.subplots_adjust(left=0.09, right=0.77, bottom=0.16, top=0.96, wspace=0.28)
+    stem = f"forward_edge_{dataset}"
     png_path = output_dir / f"{stem}.png"
     pdf_path = output_dir / f"{stem}.pdf"
-    fig.savefig(png_path, dpi=300, bbox_inches="tight")
+    fig.savefig(png_path, dpi=1200, bbox_inches="tight")
     fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
     return png_path, pdf_path
@@ -392,21 +453,19 @@ def _plot_edge_profiles(
     output_dir: Path,
     y_values: np.ndarray,
 ) -> list[Path]:
-    """Write one single-axis figure per dataset and displacement component."""
+    """Write one shared-legend two-panel figure per material field."""
     paths = []
     for dataset in datasets:
         normalized = str(dataset).lower()
-        for component in ("ux", "uy"):
-            paths.extend(
-                _plot_single_edge_profile(
-                    cases[normalized],
-                    normalized,
-                    component,
-                    nodes_list,
-                    output_dir,
-                    y_values,
-                )
+        paths.extend(
+            _plot_edge_dataset(
+                cases[normalized],
+                normalized,
+                nodes_list,
+                output_dir,
+                y_values,
             )
+        )
     return paths
 
 
