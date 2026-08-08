@@ -1,6 +1,6 @@
 """Batch forward-problem mesh convergence study.
 
-This module intentionally covers only the forward problem.  It regenerates the
+This module intentionally covers only the forward problem. It regenerates the
 same analytical BIL/EXP modulus field on each mesh, solves the forward FEM
 problem, and compares every mesh with the finest mesh after interpolation.
 Inverse gamma selection is deliberately outside this workflow.
@@ -27,7 +27,28 @@ import config as cfg
 
 
 DEFAULT_DATASETS = ("bil", "exp")
-DEFAULT_NODES = (10, 20, 30, 40, 60, 80, 100)
+DEFAULT_NODES = (4, 10, 20, 40, 80, 100)
+
+MESH_COLORS = {
+    4: "#0072B2",
+    10: "#E69F00",
+    20: "#009E73",
+    40: "#D55E00",
+    80: "#CC79A7",
+    100: "#222222",
+}
+MESH_MARKERS = {
+    4: "o",
+    10: "s",
+    20: "^",
+    40: "D",
+    80: "P",
+    100: "X",
+}
+DATASET_STYLES = {
+    "bil": {"color": "#0072B2", "marker": "o"},
+    "exp": {"color": "#D55E00", "marker": "s"},
+}
 
 rcParams["font.family"] = "serif"
 rcParams["font.serif"] = ["Times New Roman"]
@@ -155,28 +176,54 @@ def _write_metrics(rows: list[dict], output_dir: Path) -> Path:
 
 def _plot_metrics(rows: list[dict], output_dir: Path) -> tuple[Path, Path]:
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.8))
+    plot_nodes = sorted({int(row["nodes"]) for row in rows})
     for dataset in sorted({row["dataset"] for row in rows}):
         subset = sorted((row for row in rows if row["dataset"] == dataset), key=lambda r: r["nodes"])
         nodes = [row["nodes"] for row in subset]
-        axes[0].plot(nodes, [row["relative_l2_u_to_reference"] for row in subset], "o-", label=dataset.upper())
-        axes[1].plot(nodes, [row["elapsed_time_seconds"] for row in subset], "o-", label=dataset.upper())
+        style = DATASET_STYLES[dataset]
+        error_values = [
+            row["relative_l2_u_to_reference"] if row["relative_l2_u_to_reference"] > 0 else np.nan
+            for row in subset
+        ]
+        axes[0].plot(
+            nodes,
+            error_values,
+            color=style["color"],
+            marker=style["marker"],
+            linewidth=1.8,
+            markersize=4.5,
+            label=dataset.upper(),
+        )
+        axes[1].plot(
+            nodes,
+            [row["elapsed_time_seconds"] for row in subset],
+            color=style["color"],
+            marker=style["marker"],
+            linewidth=1.8,
+            markersize=4.5,
+            label=dataset.upper(),
+        )
 
     axes[0].set_xlabel("Nodes per direction")
     axes[0].set_ylabel("Relative L2 displacement difference to finest mesh")
     axes[0].set_xscale("log", base=2)
     axes[0].set_yscale("log")
+    axes[0].set_xticks(plot_nodes)
+    axes[0].set_xticklabels([str(nodes) for nodes in plot_nodes])
     axes[0].grid(True, which="both", alpha=0.3)
-    axes[0].legend()
+    axes[0].legend(fontsize=9, frameon=True, edgecolor="black", facecolor="white")
 
     axes[1].set_xlabel("Nodes per direction")
     axes[1].set_ylabel("Forward solve time (s)")
     axes[1].set_xscale("log", base=2)
+    axes[1].set_xticks(plot_nodes)
+    axes[1].set_xticklabels([str(nodes) for nodes in plot_nodes])
     axes[1].set_yscale("log")
     axes[1].grid(True, which="both", alpha=0.3)
-    axes[1].legend()
+    axes[1].legend(fontsize=9, frameon=True, edgecolor="black", facecolor="white")
 
     fig.suptitle("ASM Forward Mesh Convergence")
-    fig.tight_layout()
+    fig.tight_layout(pad=1.2)
     png_path = output_dir / "forward_grid_convergence.png"
     pdf_path = output_dir / "forward_grid_convergence.pdf"
     fig.savefig(png_path, dpi=300, bbox_inches="tight")
@@ -205,20 +252,24 @@ def _plot_single_edge_profile(
 ) -> tuple[Path, Path]:
     """Plot one component for one material field with all mesh curves."""
     fig, ax = plt.subplots(figsize=(8.2, 6.0))
-    colors = plt.cm.GnBu(np.linspace(0.35, 0.95, len(nodes_list)))
     profiles = []
 
-    for color, nodes in zip(colors, nodes_list):
+    for nodes in nodes_list:
         case = cases[nodes]
         profile = _interpolate_edge_profile(case[component], case["mesh"], y_values)
         profiles.append(profile)
         ax.plot(
             y_values,
             profile,
-            color=color,
-            linewidth=2.2,
+            color=MESH_COLORS.get(nodes, "#444444"),
+            marker=MESH_MARKERS.get(nodes, "o"),
+            markevery=max(1, len(y_values) // 12),
+            linewidth=1.8,
+            markersize=4.5,
+            markerfacecolor="white",
+            markeredgewidth=0.9,
             solid_capstyle="round",
-            label=f"{nodes} x {nodes} Nodes",
+            label=f"{nodes} nodes",
         )
 
     ax.set_xlabel(r"$y$", fontsize=16)
@@ -231,12 +282,17 @@ def _plot_single_edge_profile(
     ax.tick_params(axis="both", labelsize=12, width=1.1)
     ax.grid(True, alpha=0.22, linewidth=0.8)
     ax.legend(
-        loc="upper right",
-        fontsize=10,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.18),
+        ncol=3,
+        fontsize=9,
         frameon=True,
         edgecolor="black",
         facecolor="white",
         framealpha=0.92,
+        handlelength=2.2,
+        columnspacing=1.1,
+        borderpad=0.55,
     )
 
     # Add a small zoom around the location where mesh curves differ most.
@@ -254,8 +310,13 @@ def _plot_single_edge_profile(
     value_pad = max((value_high - value_low) * 0.12, np.finfo(float).eps)
 
     inset = inset_axes(ax, width="32%", height="31%", loc="lower left", borderpad=2.0)
-    for color, profile in zip(colors, profiles):
-        inset.plot(y_values, profile, color=color, linewidth=1.4)
+    for nodes, profile in zip(nodes_list, profiles):
+        inset.plot(
+            y_values,
+            profile,
+            color=MESH_COLORS.get(nodes, "#444444"),
+            linewidth=1.2,
+        )
     inset.set_xlim(x_low, x_high)
     inset.set_ylim(value_low - value_pad, value_high + value_pad)
     # Keep the zoom scale readable without colliding with the main y-axis.
@@ -266,7 +327,7 @@ def _plot_single_edge_profile(
 
     # The inset is positioned in axes coordinates, so explicit margins keep
     # the single-axis figure stable without tight_layout warnings.
-    fig.subplots_adjust(left=0.13, right=0.98, bottom=0.12, top=0.88)
+    fig.subplots_adjust(left=0.13, right=0.98, bottom=0.25, top=0.88)
     stem = f"forward_edge_{dataset}_{component.lower()}"
     png_path = output_dir / f"{stem}.png"
     pdf_path = output_dir / f"{stem}.pdf"
