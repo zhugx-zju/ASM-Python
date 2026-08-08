@@ -17,7 +17,7 @@ The project covers:
 - Geometry: rectangular 2D domain
 - Elements: 4-node bilinear quadrilateral elements
 - Integration: 2x2 Gauss quadrature
-- Material field: nodal Young's modulus with either bilinear or exponential spatial variation
+- Material field: nodal Young's modulus with bilinear, exponential, or single-case GRF variation
 - Boundary conditions: left edge constrained, prescribed x-displacement applied on the right edge
 - Forward output: displacement field together with the recovered tensile-end reaction force on the loading edge
 - Inverse objective: displacement misfit plus Tikhonov smoothness regularization on the normalized modulus field
@@ -46,6 +46,7 @@ The main defaults are defined in `config.py`, which now returns typed configurat
 - Poisson ratio: `0.3`
 - modulus targets: `Ex = 2.0`, `Ey = 0.5`
 - distribution type: `bil`
+- GRF defaults (used when `DIS_TYPE = 'grf'`): `E_max = 8.0`, `sigma_g = 1.0`, `ell = 1.0`, `seed = 42`
 - default regularization parameter for the fixed-gamma workflow: `1e-6`
 - default reduced-Hessian analysis: enabled at the final iterate only
 

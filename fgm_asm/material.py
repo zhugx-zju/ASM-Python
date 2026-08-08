@@ -5,6 +5,8 @@ Handles material information updates during iterations.
 
 import numpy as np
 
+from .grf import generate_grf_field
+
 
 class MaterialInfo:
     """
@@ -18,7 +20,7 @@ class MaterialInfo:
 
         Args:
             nu: Poisson's ratio
-            dis_type: Distribution type ('bil' for bilinear, 'exp' for exponential)
+            dis_type: Distribution type ('bil', 'exp', or 'grf')
             alpha: Material gradient parameter in x direction
             beta: Material gradient parameter in y direction
         """
@@ -107,13 +109,22 @@ class MaterialInfo:
         return D0
 
 
-def generate_fgm_modulus(mesh_info, dis_type='exp', Ex=2.0, Ey=2.0):
+def generate_fgm_modulus(
+    mesh_info,
+    dis_type='exp',
+    Ex=2.0,
+    Ey=2.0,
+    grf_E_max=8.0,
+    grf_sigma_g=1.0,
+    grf_ell=1.0,
+    grf_seed=42,
+):
     """
     Generate FGM modulus field for forward problem.
 
     Args:
         mesh_info: MeshInfo object
-        dis_type: Distribution type ('bil' or 'exp')
+        dis_type: Distribution type ('bil', 'exp', or 'grf')
         Ex: Target modulus ratio at x = geo_l
         Ey: Target modulus ratio at y = geo_h
 
@@ -121,6 +132,19 @@ def generate_fgm_modulus(mesh_info, dis_type='exp', Ex=2.0, Ey=2.0):
         E_field: Modulus field at nodes
         material_info: MaterialInfo object
     """
+    if dis_type == 'grf':
+        E_field = generate_grf_field(
+            mesh_info,
+            E_max=grf_E_max,
+            sigma_g=grf_sigma_g,
+            ell=grf_ell,
+            seed=grf_seed,
+        )
+        return E_field, MaterialInfo(nu=0.3, dis_type='grf')
+
+    if dis_type not in {'bil', 'exp'}:
+        raise ValueError(f"Unknown distribution type: {dis_type!r}")
+
     geo_l = mesh_info.geo_l
     geo_h = mesh_info.geo_h
 
