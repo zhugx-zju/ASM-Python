@@ -10,6 +10,7 @@ and creates four separate figures:
 """
 
 import matplotlib.pyplot as plt
+from script import REPO_ROOT
 from fgm_asm.visualization import (
     plot_displacement_fields,
     plot_modulus_distribution,
@@ -30,7 +31,7 @@ print("=" * 70)
 
 # Search for and load forward problem data
 print("\nSearching for forward problem data...")
-forward_data_path, _ = find_forward_data_path()
+forward_data_path, _ = find_forward_data_path(REPO_ROOT)
 
 # Load data
 forward_data = load_forward_data(forward_data_path)

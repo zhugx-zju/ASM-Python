@@ -10,6 +10,7 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 
+from script import REPO_ROOT
 from fgm_asm import find_optimal_gamma_lcurve, plot_lcurve_results, lbfgs_inverse_solver_scipy
 from fgm_asm.visualization import (
     plot_gradient_field,
@@ -108,7 +109,7 @@ print("Using scipy L-BFGS-B Optimizer with Tikhonov Regularization")
 print("=" * 70)
 
 print("\nSearching for forward problem data...")
-forward_data_path, forward_data = load_latest_forward_problem()
+forward_data_path, forward_data = load_latest_forward_problem(REPO_ROOT)
 
 mesh_info = forward_data["mesh_info"]
 bc_info = forward_data["bc_info"]
