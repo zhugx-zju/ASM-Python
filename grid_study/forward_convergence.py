@@ -335,23 +335,28 @@ def _plot_profile_panel(
 
     ax.set_xlabel(r"$y\; (\mathrm{mm})$", fontsize=14)
     ax.set_ylabel(rf"${component[0]}_{{{component[1:]}}}\; (\times 10^{{-3}}\,\mathrm{{mm}})$", fontsize=14)
-    ax.set_xlim(float(y_values[0]), float(y_values[-1]))
+    profile_matrix = np.asarray(profiles)
+    x_margin = float(y_values[-1] - y_values[0]) * 0.02
+    ax.set_xlim(float(y_values[0]) - x_margin, float(y_values[-1]) + x_margin)
+    profile_range = float(np.ptp(profile_matrix))
+    profile_pad = max(profile_range * 0.06, np.finfo(float).eps)
+    ax.set_ylim(float(np.min(profile_matrix)) - profile_pad, float(np.max(profile_matrix)) + profile_pad)
     ax.xaxis.set_major_locator(MultipleLocator(2))
     ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
     _style_axes(ax)
     ax.tick_params(axis="both", labelsize=10.5, width=0.9, length=4.5)
     ax.text(
         0.03,
-        0.96,
+        1.02,
         f"({panel_label})",
         transform=ax.transAxes,
         ha="left",
-        va="top",
+        va="bottom",
         fontsize=12,
+        clip_on=False,
     )
 
     # Select a compact inset around the largest difference between meshes.
-    profile_matrix = np.asarray(profiles)
     spread = np.ptp(profile_matrix, axis=0)
     focus_index = int(np.argmax(spread))
     y_center = float(y_values[focus_index])
@@ -451,17 +456,16 @@ def _plot_edge_dataset(
     fig.legend(
         handles,
         labels,
-        loc="upper center",
-        bbox_to_anchor=(0.5, 0.985),
-        ncol=3,
+        loc="center left",
+        bbox_to_anchor=(0.79, 0.5),
+        ncol=1,
         fontsize=10,
         frameon=False,
         handlelength=2.4,
         handletextpad=0.5,
         labelspacing=0.55,
-        columnspacing=1.4,
     )
-    fig.subplots_adjust(left=0.09, right=0.97, bottom=0.16, top=0.78, wspace=0.28)
+    fig.subplots_adjust(left=0.09, right=0.77, bottom=0.16, top=0.93, wspace=0.28)
     stem = f"forward_edge_{dataset}"
     png_path = output_dir / f"{stem}.png"
     pdf_path = output_dir / f"{stem}.pdf"
