@@ -346,7 +346,7 @@ def _plot_profile_panel(
     _style_axes(ax)
     ax.tick_params(axis="both", labelsize=10.5, width=0.9, length=4.5)
     ax.text(
-        0.03,
+        -0.12,
         1.02,
         f"({panel_label})",
         transform=ax.transAxes,
@@ -436,8 +436,8 @@ def _plot_edge_dataset(
     """Write one two-panel ux/uy profile figure for a material field."""
     fig, axes = plt.subplots(1, 2, figsize=(13.2, 5.6), sharex=True)
     panel_specs = (
-        ("ux", (0.56, 0.12), "a"),
-        ("uy", (0.12, 0.12), "b"),
+        ("ux", (0.46, 0.12), "a"),
+        ("uy", (0.22, 0.12), "b"),
     )
     handles = labels = None
     for ax, (component, inset_anchor, panel_label) in zip(axes, panel_specs):
