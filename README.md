@@ -69,7 +69,7 @@ The main defaults are defined in `config.py`, which now returns typed configurat
 2. Run the forward problem:
 
 ```bash
-python forward_job.py
+python -m script.forward_job
 ```
 
 3. Run one of the inverse workflows:
@@ -77,35 +77,27 @@ python forward_job.py
 Recommended, because it includes automatic gamma selection and a final independent rerun with the selected `gamma`:
 
 ```bash
-python inverse_l_curve.py
+python -m script.inverse_l_curve
 ```
 
 Alternative single-gamma L-BFGS-B workflow:
 
 ```bash
-python inverse_main.py
+python -m script.inverse_main
 ```
 
 4. Regenerate plots from saved result files if needed:
 
 ```bash
-python plot_forward_results.py
-python plot_inverse_results.py
-python plot_lcurve.py
+python -m script.plot_forward_results
+python -m script.plot_inverse_results
+python -m script.plot_lcurve
 ```
 
 ## Output Files
 
-For branch-based research work, the recommended top-level result layout is:
-
-```text
-results/
-|-- main/
-|-- disp_linear/
-`-- disp_nonlinear/
-```
-
-Within each branch-specific result root, keep the current case-folder naming style so different studies stay easy to compare.
+The main forward and inverse workflows continue to write generated case folders
+to the repository root. These outputs remain ignored by Git.
 
 The scripts save results into a folder named like:
 
@@ -143,7 +135,9 @@ Typical generated files include:
 
 Most plotting utilities automatically search for the most recently modified result folder that matches the `Geo_*_Mesh_*_Alpha_*_Beta_*_Gamma_*` pattern.
 
-For the current `main` branch, the present scripts still work with the existing case-folder layout in the repository root. The `results/<branch_name>/...` layout above is the recommended convention for ongoing branch development and future cleanup.
+The entry points resolve the repository root from their own location, so they
+write and search the same root-level case folders even when launched with
+`python -m script.<module>`.
 
 ## Repository Layout
 
@@ -152,13 +146,13 @@ For the current `main` branch, the present scripts still work with the existing 
 | File | Purpose |
 | --- | --- |
 | `config.py` | Central configuration entry point for forward, inverse, and L-curve runs. It now returns typed config objects instead of loose dictionaries. |
-| `forward_job.py` | Main forward-analysis entry point. Generates the mesh, builds the modulus field, applies boundary conditions, solves the FE system, and saves data and plots. |
-| `inverse_main.py` | Single-gamma inverse solver entry point based on the shared SciPy L-BFGS-B implementation in `fgm_asm/inverse_solver.py`. Saves results into noise-specific subdirectories. |
-| `inverse_l_curve.py` | Inverse solver entry point using SciPy L-BFGS-B together with L-curve based gamma selection, followed by a fresh rerun from the default initialization using the selected `gamma`. |
-| `check_regularization_gradient.py` | Finite-difference verification script for the analytical Tikhonov gradient. Useful when changing the regularization code. |
-| `plot_forward_results.py` | Reloads saved forward results and exports standalone forward-problem figures. |
-| `plot_inverse_results.py` | Reloads saved inverse results and exports reconstruction, convergence, gradient, and scan-vs-rerun comparison plots. |
-| `plot_lcurve.py` | Reloads saved L-curve data and exports the L-curve and curvature figures. |
+| `script/forward_job.py` | Main forward-analysis entry point. Generates the mesh, builds the modulus field, applies boundary conditions, solves the FE system, and saves data and plots. |
+| `script/inverse_main.py` | Single-gamma inverse solver entry point based on the shared SciPy L-BFGS-B implementation in `fgm_asm/inverse_solver.py`. Saves results into noise-specific subdirectories. |
+| `script/inverse_l_curve.py` | Inverse solver entry point using SciPy L-BFGS-B together with L-curve based gamma selection, followed by a fresh rerun from the default initialization using the selected `gamma`. |
+| `script/check_regularization_gradient.py` | Finite-difference verification script for the analytical Tikhonov gradient. Useful when changing the regularization code. |
+| `script/plot_forward_results.py` | Reloads saved forward results and exports standalone forward-problem figures. |
+| `script/plot_inverse_results.py` | Reloads saved inverse results and exports reconstruction, convergence, gradient, and scan-vs-rerun comparison plots. |
+| `script/plot_lcurve.py` | Reloads saved L-curve data and exports the L-curve and curvature figures. |
 | `docs/branch_scope.md` | Lightweight branch-management note describing the role of `main`, `disp_linear`, and `disp_nonlinear`. |
 | `docs/validation.md` | Lightweight validation checklist and record template for each research branch. |
 
@@ -181,7 +175,7 @@ For the current `main` branch, the present scripts still work with the existing 
 
 ## Forward Problem
 
-`forward_job.py` performs the following steps:
+`script/forward_job.py` performs the following steps:
 
 1. reads the forward configuration from `config.py`
 2. creates a structured rectangular mesh
@@ -193,7 +187,7 @@ For the current `main` branch, the present scripts still work with the existing 
 
 ## Inverse Problem Options
 
-### `inverse_l_curve.py`
+### `script/inverse_l_curve.py`
 
 This is the most complete end-to-end inverse workflow in the current repository:
 
@@ -212,7 +206,7 @@ In the current `disp_linear` branch, the optimization variables are unconstraine
 `Ehat = exp(raw) / mean(exp(raw))`. The absolute modulus scale is not optimized directly; it is
 recovered afterward from the measured tensile-end reaction force.
 
-### `inverse_main.py`
+### `script/inverse_main.py`
 
 This script uses the same SciPy L-BFGS-B implementation as the L-curve workflow, but with a fixed user-specified `gamma`.
 
@@ -220,7 +214,7 @@ It saves each noise case into its own `noise_XX.XXpct` subdirectory. The current
 
 ## Plotting
 
-`plot_inverse_results.py` now generates:
+`script/plot_inverse_results.py` now generates:
 
 - the final rerun reconstruction figure
 - iteration-history plots for the final rerun
@@ -240,8 +234,8 @@ The comparison plot is useful when you want to see whether warm-start continuati
 - `fem_forward.py` reuses one stiffness factorization for both forward and adjoint solves inside the same inverse-state evaluation.
 - `inverse_solver.py` uses one cached L-BFGS-B evaluation path and avoids duplicate forward solves in callbacks and L-curve post-processing.
 - `setup_boundary_conditions` now lives in `fgm_asm/mesh.py`.
-- `forward_job.py` saves figures without blocking on an interactive Matplotlib window.
-- `inverse_l_curve.py` processes one noise value per run. If `config.py` provides multiple values, the script currently uses the first one.
+- `script/forward_job.py` saves figures without blocking on an interactive Matplotlib window.
+- `script/inverse_l_curve.py` processes one noise value per run. If `config.py` provides multiple values, the script currently uses the first one.
 - In the current displacement-controlled inverse workflow, the adjoint problem uses homogeneous Dirichlet conditions on prescribed-displacement DOFs rather than reusing the forward loading values.
 - Plotting scripts rely on saved pickle files rather than rerunning the solver.
 - Result files are stored as Python pickle objects, which is convenient for internal reuse but not intended as a stable interchange format.
@@ -259,9 +253,9 @@ The comparison plot is useful when you want to see whether warm-start continuati
 If you are new to this repository, start here:
 
 ```bash
-python forward_job.py
-python inverse_l_curve.py
-python plot_forward_results.py
-python plot_inverse_results.py
-python plot_lcurve.py
+python -m script.forward_job
+python -m script.inverse_l_curve
+python -m script.plot_forward_results
+python -m script.plot_inverse_results
+python -m script.plot_lcurve
 ```

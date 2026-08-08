@@ -36,27 +36,22 @@ If more branches are added later, prefer short names based on the main research 
 
 ## Output Directory Convention
 
-Recommended top-level result layout:
+The main forward and inverse workflows keep their existing output convention:
+generated case folders such as `Geo_*` are written to the repository root and
+ignored by Git. The grid study has its own generated output under
+`results/grid_study/`.
+
+Case-folder pattern for the main workflows:
 
 ```text
-results/
-|-- main/
-|-- disp_linear/
-`-- disp_nonlinear/
-```
-
-Recommended case-folder pattern inside each branch:
-
-```text
-results/<branch_name>/<case_name>/
+<repository_root>/Geo_<case_name>/
 ```
 
 Examples:
 
 ```text
-results/main/Geo_9x9_Mesh_39x39_Alpha_0.1111_Beta_-0.0556_Gamma_1e-06/
-results/disp_linear/DispTop_0p10_Geo_9x9_Mesh_39x39/
-results/disp_nonlinear/FiniteStrain_NH_DispTop_0p10_Geo_9x9_Mesh_39x39/
+Geo_9x9_Mesh_39x39_Alpha_0.1111_Beta_-0.0556_Gamma_1e-06/
+results/grid_study/forward/
 ```
 
 ## Recommended README Sections Per Branch
