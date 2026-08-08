@@ -18,8 +18,9 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import rcParams
+from matplotlib.patches import ConnectionPatch, Rectangle
 from matplotlib.ticker import FuncFormatter, LogFormatterMathtext, MaxNLocator, MultipleLocator
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from scipy.interpolate import RegularGridInterpolator
 
 from fgm_asm import MeshInfo, fem_assemble, forward_solver, generate_fgm_modulus
@@ -299,8 +300,7 @@ def _plot_profile_panel(
     component: str,
     nodes_list: tuple[int, ...],
     y_values: np.ndarray,
-    inset_loc: str,
-    connector_locs: tuple[int, int],
+    inset_anchor: tuple[float, float],
     panel_label: str,
 ) -> tuple[list, list]:
     """Draw one displacement component and its local convergence inset."""
@@ -366,7 +366,15 @@ def _plot_profile_panel(
     value_high = float(np.max(focus_values))
     value_pad = max((value_high - value_low) * 0.12, np.finfo(float).eps)
 
-    inset = inset_axes(ax, width="30%", height="28%", loc=inset_loc, borderpad=1.2)
+    inset = inset_axes(
+        ax,
+        width="26%",
+        height="28%",
+        loc="lower left",
+        bbox_to_anchor=(*inset_anchor, 1.0, 1.0),
+        bbox_transform=ax.transAxes,
+        borderpad=0.0,
+    )
     for nodes, profile in zip(nodes_list, profiles):
         inset.plot(
             y_values,
@@ -384,15 +392,32 @@ def _plot_profile_panel(
     inset.tick_params(axis="y", labelleft=False)
     for spine in inset.spines.values():
         spine.set_linewidth(1.1)
-    mark_inset(
-        ax,
-        inset,
-        loc1=connector_locs[0],
-        loc2=connector_locs[1],
-        fc="none",
-        ec="black",
-        lw=0.7,
+    zoom_y_low = value_low - value_pad
+    zoom_y_high = value_high + value_pad
+    zoom_box = Rectangle(
+        (x_low, zoom_y_low),
+        x_high - x_low,
+        zoom_y_high - zoom_y_low,
+        transform=ax.transData,
+        fill=False,
+        edgecolor="black",
+        linewidth=0.9,
+        zorder=1.5,
     )
+    ax.add_patch(zoom_box)
+    for inset_x, zoom_x in zip((0.0, 1.0), (x_low, x_high)):
+        connector = ConnectionPatch(
+            xyA=(inset_x, 1.0),
+            coordsA=inset.transAxes,
+            xyB=(zoom_x, zoom_y_low),
+            coordsB=ax.transData,
+            axesA=inset,
+            axesB=ax,
+            color="black",
+            linewidth=0.7,
+            zorder=1.4,
+        )
+        ax.figure.add_artist(connector)
     return handles, labels
 
 
@@ -406,19 +431,18 @@ def _plot_edge_dataset(
     """Write one two-panel ux/uy profile figure for a material field."""
     fig, axes = plt.subplots(1, 2, figsize=(13.2, 5.6), sharex=True)
     panel_specs = (
-        ("ux", "lower right", (1, 4), "a"),
-        ("uy", "lower left", (2, 3), "b"),
+        ("ux", (0.56, 0.12), "a"),
+        ("uy", (0.12, 0.12), "b"),
     )
     handles = labels = None
-    for ax, (component, inset_loc, connector_locs, panel_label) in zip(axes, panel_specs):
+    for ax, (component, inset_anchor, panel_label) in zip(axes, panel_specs):
         panel_handles, panel_labels = _plot_profile_panel(
             ax,
             cases,
             component,
             nodes_list,
             y_values,
-            inset_loc,
-            connector_locs,
+            inset_anchor,
             panel_label,
         )
         if handles is None:
@@ -427,16 +451,17 @@ def _plot_edge_dataset(
     fig.legend(
         handles,
         labels,
-        loc="upper left",
-        bbox_to_anchor=(0.79, 0.92),
-        ncol=1,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.985),
+        ncol=3,
         fontsize=10,
         frameon=False,
         handlelength=2.4,
         handletextpad=0.5,
         labelspacing=0.55,
+        columnspacing=1.4,
     )
-    fig.subplots_adjust(left=0.09, right=0.77, bottom=0.16, top=0.96, wspace=0.28)
+    fig.subplots_adjust(left=0.09, right=0.97, bottom=0.16, top=0.78, wspace=0.28)
     stem = f"forward_edge_{dataset}"
     png_path = output_dir / f"{stem}.png"
     pdf_path = output_dir / f"{stem}.pdf"
