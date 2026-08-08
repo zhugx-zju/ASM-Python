@@ -7,6 +7,7 @@ selected gamma.
 """
 
 import time
+import tracemalloc
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -67,22 +68,28 @@ mesh_info.assemble_mass_matrix()
 print(f"\nAdding {noise_level*100:.2f}% noise to displacement data...")
 U_measured = add_noise_to_displacement(U_clean, noise_level)
 
+tracemalloc.start()
 start_time_lcurve = time.time()
-gamma_optimal, lcurve_results = find_optimal_gamma_lcurve(
-    mesh_info=mesh_info,
-    bc_info=bc_info,
-    U_measured=U_measured,
-    config=forward_config,
-    gamma_min=lcurve_config.gamma_min,
-    gamma_max=lcurve_config.gamma_max,
-    n_gamma=lcurve_config.n_gamma,
-    E_min=lcurve_config.E_min,
-    E_max=lcurve_config.E_max,
-    max_iter=lcurve_config.max_iter,
-    ftol=lcurve_config.ftol,
-    gtol=lcurve_config.gtol,
-)
+try:
+    gamma_optimal, lcurve_results = find_optimal_gamma_lcurve(
+        mesh_info=mesh_info,
+        bc_info=bc_info,
+        U_measured=U_measured,
+        config=forward_config,
+        gamma_min=lcurve_config.gamma_min,
+        gamma_max=lcurve_config.gamma_max,
+        n_gamma=lcurve_config.n_gamma,
+        E_min=lcurve_config.E_min,
+        E_max=lcurve_config.E_max,
+        max_iter=lcurve_config.max_iter,
+        ftol=lcurve_config.ftol,
+        gtol=lcurve_config.gtol,
+    )
+finally:
+    _, peak_lcurve_memory_bytes = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
 elapsed_time_lcurve = time.time() - start_time_lcurve
+peak_lcurve_python_memory_mb = float(peak_lcurve_memory_bytes / 1024**2)
 print(f"\nL-curve analysis completed in {elapsed_time_lcurve:.2f} seconds")
 
 optimal_idx = lcurve_results["optimal_idx"]
@@ -94,21 +101,27 @@ print("\n" + "=" * 70)
 print("Re-running inverse solve with selected gamma from default initialization")
 print("=" * 70)
 
+tracemalloc.start()
 start_time_rerun = time.time()
-results = lbfgs_inverse_solver_scipy(
-    mesh_info=mesh_info,
-    bc_info=bc_info,
-    U_measured=U_measured,
-    E_init=None,
-    gamma=gamma_optimal,
-    E_min=lcurve_config.E_min,
-    E_max=lcurve_config.E_max,
-    max_iter=lcurve_config.max_iter,
-    ftol=lcurve_config.ftol,
-    gtol=lcurve_config.gtol,
-    nu=forward_config.nu,
-)
+try:
+    results = lbfgs_inverse_solver_scipy(
+        mesh_info=mesh_info,
+        bc_info=bc_info,
+        U_measured=U_measured,
+        E_init=None,
+        gamma=gamma_optimal,
+        E_min=lcurve_config.E_min,
+        E_max=lcurve_config.E_max,
+        max_iter=lcurve_config.max_iter,
+        ftol=lcurve_config.ftol,
+        gtol=lcurve_config.gtol,
+        nu=forward_config.nu,
+    )
+finally:
+    _, peak_rerun_memory_bytes = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
 elapsed_time_rerun = time.time() - start_time_rerun
+peak_rerun_python_memory_mb = float(peak_rerun_memory_bytes / 1024**2)
 E_reconstructed = results["E_final"]
 errors = compute_errors(E_true.ravel(), E_reconstructed)
 
@@ -168,6 +181,8 @@ save_inverse_results(
         "gamma_used": gamma_optimal,
         "n_iterations": results["n_iterations"],
         "elapsed_time_total_seconds": elapsed_time_rerun,
+        "peak_python_memory_mb": peak_rerun_python_memory_mb,
+        "peak_lcurve_python_memory_mb": peak_lcurve_python_memory_mb,
         "result_source": "final_rerun_after_lcurve",
         "gamma_selection_method": "lcurve_max_curvature",
         "lcurve_analysis_file": lcurve_save_path.name,
@@ -196,6 +211,8 @@ run_metadata = {
     "MESSAGE": str(results["message"]),
     "N_ITERATIONS": int(results["n_iterations"]),
     "ELAPSED_TIME_TOTAL_SECONDS": float(elapsed_time_rerun),
+    "PEAK_PYTHON_MEMORY_MB": peak_rerun_python_memory_mb,
+    "PEAK_LCURVE_PYTHON_MEMORY_MB": peak_lcurve_python_memory_mb,
     "LCURVE_ANALYSIS_FILE": lcurve_save_path.name,
     "LCURVE_SCAN_TIME_SECONDS": float(elapsed_time_lcurve),
     "SCAN_OPTIMAL_MAE_PCT": float(scan_errors["mae"]),

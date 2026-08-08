@@ -7,6 +7,7 @@ regularization.
 """
 
 import time
+import tracemalloc
 import numpy as np
 
 from fgm_asm import lbfgs_inverse_solver_scipy
@@ -59,23 +60,28 @@ for noise_level in np.asarray(inverse_config.noise_levels, dtype=float):
     print(f"  Displacement noise added: {noise_level*100:.2f}%")
 
     print(f"\nStarting L-BFGS-B optimization...")
+    tracemalloc.start()
     start_time = time.time()
-
-    results = lbfgs_inverse_solver_scipy(
-        mesh_info=mesh_info,
-        bc_info=bc_info,
-        U_measured=U_measured,
-        E_init=None,
-        gamma=inverse_config.gamma,
-        E_min=inverse_config.E_min,
-        E_max=inverse_config.E_max,
-        max_iter=inverse_config.max_iter,
-        ftol=inverse_config.ftol,
-        gtol=inverse_config.gtol,
-        nu=forward_config.nu,
-    )
+    try:
+        results = lbfgs_inverse_solver_scipy(
+            mesh_info=mesh_info,
+            bc_info=bc_info,
+            U_measured=U_measured,
+            E_init=None,
+            gamma=inverse_config.gamma,
+            E_min=inverse_config.E_min,
+            E_max=inverse_config.E_max,
+            max_iter=inverse_config.max_iter,
+            ftol=inverse_config.ftol,
+            gtol=inverse_config.gtol,
+            nu=forward_config.nu,
+        )
+    finally:
+        _, peak_memory_bytes = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
 
     elapsed_time = time.time() - start_time
+    peak_python_memory_mb = float(peak_memory_bytes / 1024**2)
     E_reconstructed = results["E_final"]
     errors = compute_errors(E_true.ravel(), E_reconstructed)
 
@@ -101,6 +107,7 @@ for noise_level in np.asarray(inverse_config.noise_levels, dtype=float):
         extra_data={
             "n_iterations": results["n_iterations"],
             "elapsed_time_total_seconds": elapsed_time,
+            "peak_python_memory_mb": peak_python_memory_mb,
         },
     )
     run_metadata = {
@@ -115,6 +122,7 @@ for noise_level in np.asarray(inverse_config.noise_levels, dtype=float):
         "MESSAGE": str(results["message"]),
         "N_ITERATIONS": int(results["n_iterations"]),
         "ELAPSED_TIME_TOTAL_SECONDS": float(elapsed_time),
+        "PEAK_PYTHON_MEMORY_MB": peak_python_memory_mb,
     }
     if "tensile_end_force" in forward_data:
         run_metadata["TRUE_TENSILE_END_FORCE"] = float(forward_data["tensile_end_force"])
