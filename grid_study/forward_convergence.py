@@ -1,8 +1,8 @@
 """Batch forward-problem mesh convergence study.
 
-This module intentionally covers only the forward problem. It regenerates the
-same analytical BIL/EXP modulus field on each mesh, solves the forward FEM
-problem, and compares every mesh with the finest mesh after interpolation.
+This module intentionally covers only the forward problem. It evaluates the
+same analytical BIL/EXP field, or one reference GRF field interpolated from
+the finest mesh, on each mesh and compares every mesh with the finest mesh.
 Inverse gamma selection is deliberately outside this workflow.
 """
 
@@ -31,12 +31,12 @@ from matplotlib.ticker import (
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from scipy.interpolate import RegularGridInterpolator
 
-from fgm_asm import MeshInfo, fem_assemble, forward_solver, generate_fgm_modulus
+from fgm_asm import MaterialInfo, MeshInfo, fem_assemble, forward_solver, generate_fgm_modulus
 from fgm_asm.mesh import setup_boundary_conditions
 import config as cfg
 
 
-DEFAULT_DATASETS = ("bil", "exp")
+DEFAULT_DATASETS = ("bil", "exp", "grf")
 DEFAULT_NODES = (4, 10, 20, 40, 80, 100)
 
 MESH_COLORS = {
@@ -74,6 +74,7 @@ MESH_LINEWIDTHS = {
 DATASET_STYLES = {
     "bil": {"color": "#1f77b4", "marker": "o", "linestyle": "-"},
     "exp": {"color": "#ff7f0e", "marker": "s", "linestyle": "--"},
+    "grf": {"color": "#2ca02c", "marker": "^", "linestyle": "-."},
 }
 
 rcParams["font.family"] = "serif"
@@ -154,7 +155,11 @@ def _measure_case(func):
     return value, float(time.perf_counter() - start), float(peak_bytes / 1024**2)
 
 
-def run_forward_case(dis_type: str, nodes: int) -> dict:
+def run_forward_case(
+    dis_type: str,
+    nodes: int,
+    grf_reference: dict | None = None,
+) -> dict:
     if nodes < 2:
         raise ValueError(f"nodes must be at least 2, got {nodes}")
 
@@ -167,12 +172,24 @@ def run_forward_case(dis_type: str, nodes: int) -> dict:
     )
 
     def solve():
-        E_field, material_info = generate_fgm_modulus(
-            mesh,
-            dis_type=dis_type,
-            Ex=forward_config.Ex,
-            Ey=forward_config.Ey,
-        )
+        if dis_type == "grf" and grf_reference is not None:
+            material_info = MaterialInfo(nu=forward_config.nu, dis_type="grf")
+            E_field = _interpolate_field(
+                grf_reference["E_field"],
+                grf_reference["mesh"],
+                mesh,
+            )
+        else:
+            E_field, material_info = generate_fgm_modulus(
+                mesh,
+                dis_type=dis_type,
+                Ex=forward_config.Ex,
+                Ey=forward_config.Ey,
+                grf_E_max=forward_config.grf_E_max,
+                grf_sigma_g=forward_config.grf_sigma_g,
+                grf_ell=forward_config.grf_ell,
+                grf_seed=forward_config.grf_seed,
+            )
         material_info.nu = forward_config.nu
         material_info.update(E_field.ravel(order="C"), iteration=1)
         bc_info = setup_boundary_conditions(
@@ -276,58 +293,34 @@ def _plot_metrics(rows: list[dict], output_dir: Path) -> tuple[Path, Path]:
     time_ax.spines["bottom"].set_visible(False)
     time_ax.spines["left"].set_visible(False)
 
-    legend_handles = [
-        Line2D(
-            [0],
-            [0],
-            color=DATASET_STYLES["bil"]["color"],
-            marker=DATASET_STYLES["bil"]["marker"],
-            linestyle="-",
-            linewidth=1.8,
-            markersize=4.5,
-            label=r"BIL, relative $L_2$ error (solid)",
-        ),
-        Line2D(
-            [0],
-            [0],
-            color=DATASET_STYLES["exp"]["color"],
-            linestyle="-",
-            linewidth=1.8,
-            marker=DATASET_STYLES["exp"]["marker"],
-            markersize=4.5,
-            label=r"EXP, relative $L_2$ error (solid)",
-        ),
-        Line2D(
-            [0],
-            [0],
-            color=DATASET_STYLES["bil"]["color"],
-            marker=DATASET_STYLES["bil"]["marker"],
-            linestyle="--",
-            linewidth=1.8,
-            markersize=4.5,
-            label=r"BIL, forward solve time (dashed)",
-        ),
-        Line2D(
-            [0],
-            [0],
-            color=DATASET_STYLES["exp"]["color"],
-            linestyle="--",
-            linewidth=1.8,
-            marker=DATASET_STYLES["exp"]["marker"],
-            markersize=4.5,
-            label=r"EXP, forward solve time (dashed)",
-        ),
-    ]
+    legend_handles = []
+    for dataset in ("bil", "exp", "grf"):
+        style = DATASET_STYLES[dataset]
+        name = dataset.upper()
+        legend_handles.extend(
+            [
+                Line2D(
+                    [0], [0], color=style["color"], marker=style["marker"],
+                    linestyle="-", linewidth=1.8, markersize=4.5,
+                    label=rf"{name}, error (solid)",
+                ),
+                Line2D(
+                    [0], [0], color=style["color"], marker=style["marker"],
+                    linestyle="--", linewidth=1.8, markersize=4.5,
+                    label=rf"{name}, time (dashed)",
+                ),
+            ]
+        )
     error_ax.legend(
         legend_handles,
         [handle.get_label() for handle in legend_handles],
         loc="upper center",
         bbox_to_anchor=(0.5, 0.97),
-        ncol=1,
-        fontsize=8.5,
+        ncol=3,
+        fontsize=8.0,
         frameon=False,
-        handlelength=3.0,
-        columnspacing=1.2,
+        handlelength=2.4,
+        columnspacing=0.9,
         handletextpad=0.5,
         labelspacing=0.55,
     )
@@ -572,6 +565,7 @@ def run_forward_grid_study(
     nodes_list = tuple(sorted({int(nodes) for nodes in nodes_list}))
     if not nodes_list or max(nodes_list) not in nodes_list:
         raise ValueError("nodes_list must contain at least one mesh")
+    reference_nodes = max(nodes_list)
 
     raw_cases = {}
     manifest = {
@@ -585,11 +579,28 @@ def run_forward_grid_study(
 
     for dataset in datasets:
         normalized = str(dataset).strip().lower()
-        if normalized not in {"bil", "exp"}:
-            raise ValueError(f"Forward grid study supports only bil/exp, got {dataset!r}")
+        if normalized not in {"bil", "exp", "grf"}:
+            raise ValueError(f"Forward grid study supports only bil/exp/grf, got {dataset!r}")
         raw_cases[normalized] = {}
+        grf_reference = None
+        if normalized == "grf":
+            reference_mesh = MeshInfo(
+                cfg.get_forward_config().geo_l,
+                cfg.get_forward_config().geo_h,
+                reference_nodes - 1,
+                reference_nodes - 1,
+            )
+            reference_field, _ = generate_fgm_modulus(
+                reference_mesh,
+                dis_type="grf",
+                grf_E_max=cfg.get_forward_config().grf_E_max,
+                grf_sigma_g=cfg.get_forward_config().grf_sigma_g,
+                grf_ell=cfg.get_forward_config().grf_ell,
+                grf_seed=cfg.get_forward_config().grf_seed,
+            )
+            grf_reference = {"mesh": reference_mesh, "E_field": reference_field}
         for nodes in nodes_list:
-            case = run_forward_case(normalized, nodes)
+            case = run_forward_case(normalized, nodes, grf_reference=grf_reference)
             raw_cases[normalized][nodes] = case
             case_dir = output_dir / normalized / f"nodes_{nodes}"
             case_dir.mkdir(parents=True, exist_ok=True)
@@ -623,7 +634,6 @@ def run_forward_grid_study(
                 "result_file": str((case_dir / "forward_result.pkl").relative_to(output_dir)),
             })
 
-    reference_nodes = max(nodes_list)
     metric_rows = []
     profile_rows = []
     y_values = np.linspace(0.0, float(cfg.get_forward_config().geo_h), 181)
