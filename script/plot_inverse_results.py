@@ -10,6 +10,7 @@ and creates up to four separate figures:
 """
 
 import matplotlib.pyplot as plt
+from script import REPO_ROOT
 from fgm_asm.visualization import (
     plot_reconstruction_comparison,
     plot_reconstruction_results,
@@ -28,7 +29,7 @@ print("=" * 70)
 
 # Search for results data
 print("\nSearching for results data...")
-inverse_results_path, results_folder = find_inverse_results_path()
+inverse_results_path, results_folder = find_inverse_results_path(REPO_ROOT)
 
 # Load data
 forward_data, inverse_results = load_inverse_data(inverse_results_path)

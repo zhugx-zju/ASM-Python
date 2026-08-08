@@ -7,6 +7,7 @@ Results are saved for later use in inverse problem.
 """
 
 from pathlib import Path
+from script import REPO_ROOT
 from fgm_asm import MeshInfo, fem_assemble, forward_solver, generate_fgm_modulus
 from fgm_asm.mesh import setup_boundary_conditions
 from fgm_asm.results_io import save_forward_data
@@ -93,8 +94,8 @@ beta = material_info.beta
 gamma = inverse_config.gamma
 
 folder_name = config.output_folder_name(alpha, beta, gamma)
-output_dir = Path(folder_name)
-output_dir.mkdir(exist_ok=True)
+output_dir = REPO_ROOT / folder_name
+output_dir.mkdir(parents=True, exist_ok=True)
 print(f"  Output directory: {output_dir}")
 
 results = {
@@ -107,7 +108,7 @@ results = {
     'folder_name': folder_name,  # Save folder name for reference
 }
 
-output_dir = save_forward_data(results, folder_name).parent
+output_dir = save_forward_data(results, output_dir).parent
 print(f"  Data saved to {output_dir / 'forward_problem_data.pkl'}")
 
 

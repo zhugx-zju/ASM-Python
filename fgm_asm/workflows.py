@@ -22,5 +22,10 @@ def resolve_results_dir(forward_data_path: Path | str, forward_data: dict[str, A
     forward_data_path = Path(forward_data_path)
     folder_name = forward_data.get("folder_name")
     if folder_name:
-        return Path(folder_name)
+        folder_path = Path(folder_name)
+        if folder_path.is_absolute():
+            return folder_path
+        if forward_data_path.parent.name == folder_path.name:
+            return forward_data_path.parent
+        return forward_data_path.parent / folder_path
     return forward_data_path.parent

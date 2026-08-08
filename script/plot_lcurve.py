@@ -8,6 +8,7 @@ This script reads the saved L-curve data file and creates two figures:
 
 import matplotlib.pyplot as plt
 
+from script import REPO_ROOT
 from fgm_asm import plot_lcurve_results
 from fgm_asm.results_io import find_lcurve_data_path, load_lcurve_data
 
@@ -17,7 +18,7 @@ print("L-curve Results Plotter")
 print("=" * 70)
 
 print("\nSearching for L-curve analysis data...")
-lcurve_path, results_folder = find_lcurve_data_path()
+lcurve_path, results_folder = find_lcurve_data_path(REPO_ROOT)
 
 lcurve_results = load_lcurve_data(lcurve_path)
 print(f"  Loaded L-curve analysis from {lcurve_path}")
