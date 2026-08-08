@@ -194,18 +194,17 @@ RBF covariance is sampled through separable one-dimensional Cholesky factors;
 this avoids constructing the dense pairwise covariance matrix used by the
 reference MATLAB implementation and keeps fine meshes practical.
 
-The public API is:
+The public API generates one case at a time:
 
 ```python
 from fgm_asm import generate_grf_field
 
-fields, E_max_vec = generate_grf_field(
+E_field = generate_grf_field(
     mesh_info,
-    num=10,
     E_max=8.0,
     sigma_g=1.0,
     ell=1.0,
-    seed_max=42,
+    seed=42,
 )
 ```
 

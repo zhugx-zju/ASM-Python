@@ -117,7 +117,7 @@ def generate_fgm_modulus(
     grf_E_max=8.0,
     grf_sigma_g=1.0,
     grf_ell=1.0,
-    grf_seed_max=42,
+    grf_seed=42,
 ):
     """
     Generate FGM modulus field for forward problem.
@@ -130,22 +130,21 @@ def generate_fgm_modulus(
         grf_E_max: Maximum GRF modulus value
         grf_sigma_g: GRF tanh scaling
         grf_ell: GRF correlation length
-        grf_seed_max: GRF random seed
+        grf_seed: GRF random seed
 
     Returns:
         E_field: Modulus field at nodes
         material_info: MaterialInfo object
     """
     if dis_type == 'grf':
-        fields, _ = generate_grf_field(
+        E_field = generate_grf_field(
             mesh_info,
-            num=1,
             E_max=grf_E_max,
             sigma_g=grf_sigma_g,
             ell=grf_ell,
-            seed_max=grf_seed_max,
+            seed=grf_seed,
         )
-        return fields[0], MaterialInfo(nu=0.3, dis_type='grf')
+        return E_field, MaterialInfo(nu=0.3, dis_type='grf')
 
     if dis_type not in {'bil', 'exp'}:
         raise ValueError(f"Unknown distribution type: {dis_type!r}")

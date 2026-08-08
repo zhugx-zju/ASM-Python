@@ -21,21 +21,19 @@ def _rbf_factor(coordinates: np.ndarray, ell: float, jitter: float) -> np.ndarra
 
 def generate_grf_field(
     mesh_info,
-    num: int = 1,
     E_max: float = 8.0,
     sigma_g: float = 1.0,
     ell: float = 1.0,
-    seed_max: int = 42,
+    seed: int = 42,
     jitter: float = 1e-6,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Generate GRF modulus samples using the MATLAB RBF construction.
+) -> np.ndarray:
+    """Generate one GRF modulus field on an ASM structured mesh.
 
-    Returns ``(E_field, E_max_vec)`` with field shape
-    ``[num, nodes_y, nodes_x]``. The same seed controls the shuffled
-    ``E_max`` sequence and the Gaussian samples, as in the MATLAB routine.
+    The MATLAB routine also supports batch dataset generation and shuffles a
+    vector of ``E_max`` values. ASM forward workflows solve one case at a
+    time, so this API deliberately keeps only the single-case part: one
+    configured ``E_max`` and one reproducible Gaussian realization.
     """
-    if int(num) != num or num < 1:
-        raise ValueError(f"num must be a positive integer, got {num!r}")
     if E_max <= 0.0:
         raise ValueError(f"E_max must be positive, got {E_max}")
     if sigma_g < 0.0:
@@ -45,23 +43,14 @@ def generate_grf_field(
     if jitter <= 0.0:
         raise ValueError(f"jitter must be positive, got {jitter}")
 
-    num = int(num)
-    rng = np.random.RandomState(int(seed_max))
-    # A single forward sample should use the configured maximum directly.
-    # For multiple samples, retain the MATLAB linspace-and-shuffle behavior.
-    E_max_vec = np.array([float(E_max)]) if num == 1 else np.linspace(1.0, float(E_max), num)
-    rng.shuffle(E_max_vec)
+    rng = np.random.RandomState(int(seed))
 
     x_coordinates = np.asarray(mesh_info.plot_x[0, :], dtype=float)
     y_coordinates = np.asarray(mesh_info.plot_y[:, 0], dtype=float)
     L_x = _rbf_factor(x_coordinates, float(ell), float(jitter))
     L_y = _rbf_factor(y_coordinates, float(ell), float(jitter))
 
-    fields = np.empty((num, mesh_info.nods_y, mesh_info.nods_x), dtype=float)
-    for index, sample_max in enumerate(E_max_vec):
-        standard_normal = rng.standard_normal((mesh_info.nods_y, mesh_info.nods_x))
-        gaussian_field = L_y @ standard_normal @ L_x.T
-        normalized = (np.tanh(float(sigma_g) * gaussian_field) + 1.0) / 2.0
-        fields[index] = float(sample_max) * normalized
-
-    return fields, E_max_vec
+    standard_normal = rng.standard_normal((mesh_info.nods_y, mesh_info.nods_x))
+    gaussian_field = L_y @ standard_normal @ L_x.T
+    normalized = (np.tanh(float(sigma_g) * gaussian_field) + 1.0) / 2.0
+    return float(E_max) * normalized

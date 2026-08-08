@@ -35,7 +35,7 @@ if config.dis_type.lower() == "grf":
     print(f"  GRF E_max: {config.grf_E_max:.2f}")
     print(f"  GRF sigma_g: {config.grf_sigma_g:.2f}")
     print(f"  GRF ell: {config.grf_ell:.2f}")
-    print(f"  GRF seed: {config.grf_seed_max}")
+    print(f"  GRF seed: {config.grf_seed}")
 
 
 # ============================================================
@@ -60,7 +60,7 @@ E_field, material_info = generate_fgm_modulus(
     grf_E_max=config.grf_E_max,
     grf_sigma_g=config.grf_sigma_g,
     grf_ell=config.grf_ell,
-    grf_seed_max=config.grf_seed_max,
+    grf_seed=config.grf_seed,
 )
 material_info.nu = config.nu
 if config.dis_type.lower() in {"bil", "exp"}:

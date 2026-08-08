@@ -24,7 +24,7 @@ class ForwardConfig:
     grf_E_max: float = 8.0
     grf_sigma_g: float = 1.0
     grf_ell: float = 1.0
-    grf_seed_max: int = 42
+    grf_seed: int = 42
 
     def to_dict(self) -> dict:
         """Return a plain dictionary version for logging or serialization."""
@@ -38,7 +38,7 @@ class ForwardConfig:
                 f"Mesh_{self.nel_x}x{self.nel_y}_"
                 f"GRF_Emax_{self.grf_E_max:g}_"
                 f"Sigma_{self.grf_sigma_g:g}_Ell_{self.grf_ell:g}_"
-                f"Seed_{self.grf_seed_max}_Gamma_{gamma:.0e}"
+                f"Seed_{self.grf_seed}_Gamma_{gamma:.0e}"
             )
         return (
             f"Geo_{int(self.geo_l)}x{int(self.geo_h)}_"
@@ -117,7 +117,7 @@ def coerce_forward_config(config: ForwardConfig | Mapping[str, object]) -> Forwa
         grf_E_max=float(config.get("grf_E_max", 8.0)),
         grf_sigma_g=float(config.get("grf_sigma_g", 1.0)),
         grf_ell=float(config.get("grf_ell", 1.0)),
-        grf_seed_max=int(config.get("grf_seed_max", 42)),
+        grf_seed=int(config.get("grf_seed", config.get("grf_seed_max", 42))),
     )
 
 

@@ -33,7 +33,7 @@ DIS_TYPE = 'bil'
 GRF_E_MAX = 8.0
 GRF_SIGMA_G = 1.0
 GRF_ELL = 1.0
-GRF_SEED_MAX = 42
+GRF_SEED = 42
 
 
 # ============================================================
@@ -80,7 +80,7 @@ def get_forward_config():
         grf_E_max=GRF_E_MAX,
         grf_sigma_g=GRF_SIGMA_G,
         grf_ell=GRF_ELL,
-        grf_seed_max=GRF_SEED_MAX,
+        grf_seed=GRF_SEED,
     )
 
 
