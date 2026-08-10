@@ -269,12 +269,20 @@ def _plot_metrics(rows: list[dict], output_dir: Path) -> tuple[Path, Path]:
     time_ax = error_ax.twinx()
     plot_nodes = sorted({int(row["nodes"]) for row in rows})
     reference_nodes = max(int(row["reference_nodes"]) for row in rows)
+    positive_errors = [
+        float(row["relative_l2_u_to_reference"])
+        for row in rows
+        if float(row["relative_l2_u_to_reference"]) > 0.0
+    ]
+    error_floor = min(positive_errors) * 0.5
     for dataset in sorted({row["dataset"] for row in rows}):
         subset = sorted((row for row in rows if row["dataset"] == dataset), key=lambda r: r["nodes"])
         nodes = [row["nodes"] for row in subset]
         style = DATASET_STYLES[dataset]
         error_values = [
-            row["relative_l2_u_to_reference"] if row["relative_l2_u_to_reference"] > 0 else np.nan
+            float(row["relative_l2_u_to_reference"])
+            if float(row["relative_l2_u_to_reference"]) > 0.0
+            else error_floor
             for row in subset
         ]
         error_ax.plot(
@@ -300,8 +308,11 @@ def _plot_metrics(rows: list[dict], output_dir: Path) -> tuple[Path, Path]:
     error_ax.set_ylabel(f"Relative L2 difference to {reference_nodes} x {reference_nodes} mesh")
     error_ax.set_xscale("log", base=2)
     error_ax.set_yscale("log")
-    error_ax.set_xticks(plot_nodes)
-    error_ax.set_xticklabels([str(nodes) for nodes in plot_nodes])
+    tick_nodes = [nodes for nodes in plot_nodes if nodes != reference_nodes]
+    error_ax.set_xticks(tick_nodes)
+    error_ax.set_xticklabels([str(nodes) for nodes in tick_nodes])
+    time_ax.set_xticks(tick_nodes)
+    time_ax.set_xticklabels([])
     error_ax.set_box_aspect(1.0)
 
     time_ax.set_ylabel("Forward solve time (s)")
