@@ -117,7 +117,7 @@ def generate_fgm_modulus(
     grf_E_max=8.0,
     grf_sigma_g=1.0,
     grf_ell=1.0,
-    grf_seed=42,
+    grf_seed=123,
 ):
     """
     Generate FGM modulus field for forward problem.

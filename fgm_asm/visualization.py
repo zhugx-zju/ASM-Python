@@ -127,7 +127,7 @@ def plot_modulus_distribution(mesh_info, E_field, save_path=None):
             fig_clean,
             save_path,
             'modulus_distribution_plain',
-            formats=('png', 'svg'),
+            formats=('png', 'pdf'),
         )
         plt.close(fig_clean)
         print(f"  Modulus distribution figure saved to {_coerce_save_path(save_path)}")
@@ -210,7 +210,7 @@ def plot_single_displacement_field(mesh_info, U, component='ux', save_path=None)
     plt.tight_layout()
 
     if save_path:
-        _save_figure(fig, save_path, filename, formats=('png', 'pdf', 'svg'))
+        _save_figure(fig, save_path, filename, formats=('png', 'pdf'))
         print(f"  Single displacement figure saved to {_coerce_save_path(save_path) / filename}")
 
     return fig

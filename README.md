@@ -58,9 +58,9 @@ The main defaults are defined in `config.py`, which now returns typed configurat
 - mesh: `39 x 39`
 - total load: `0.01`
 - Poisson ratio: `0.3`
-- modulus targets: `Ex = 2.0`, `Ey = 0.5`
+- modulus targets: `Ex = 4.0`, `Ey = 0.25`
 - distribution type: `bil`
-- GRF defaults (used when `DIS_TYPE = 'grf'`): `E_max = 8.0`, `sigma_g = 1.0`, `ell = 25.0 mm`, `seed = 42`
+- GRF defaults (used when `DIS_TYPE = 'grf'`): `E_max = 8.0`, `sigma_g = 1.0`, `ell = 25.0 mm`, `seed = 123`
 - default regularization parameter: `1e-6`
 
 ## Typical Workflow
@@ -102,13 +102,13 @@ to the repository root. These outputs remain ignored by Git.
 The scripts save results into a folder named like:
 
 ```text
-Geo_9x9_Mesh_39x39_Alpha_0.1111_Beta_-0.0556_Gamma_1e-06
+Geo_9x9_Mesh_39x39_Alpha_0.3333_Beta_-0.0833_Gamma_1e-06
 ```
 
 Inverse-result files are now organized in a noise-specific subfolder, for example:
 
 ```text
-Geo_9x9_Mesh_39x39_Alpha_0.1111_Beta_-0.0556_Gamma_1e-06/
+Geo_9x9_Mesh_39x39_Alpha_0.3333_Beta_-0.0833_Gamma_1e-06/
 |-- noise_0.00pct/
 |   |-- inverse_results.pkl
 |   |-- lcurve_analysis.pkl

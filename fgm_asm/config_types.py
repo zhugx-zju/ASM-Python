@@ -24,7 +24,7 @@ class ForwardConfig:
     grf_E_max: float = 8.0
     grf_sigma_g: float = 1.0
     grf_ell: float = 1.0
-    grf_seed: int = 42
+    grf_seed: int = 123
 
     def to_dict(self) -> dict:
         """Return a plain dictionary version for logging or serialization."""
@@ -116,7 +116,7 @@ def coerce_forward_config(config: ForwardConfig | Mapping[str, object]) -> Forwa
         grf_E_max=float(config.get("grf_E_max", 8.0)),
         grf_sigma_g=float(config.get("grf_sigma_g", 1.0)),
         grf_ell=float(config.get("grf_ell", 1.0)),
-        grf_seed=int(config.get("grf_seed", config.get("grf_seed_max", 42))),
+        grf_seed=int(config.get("grf_seed", config.get("grf_seed_max", 123))),
     )
 
 

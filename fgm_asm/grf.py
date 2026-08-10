@@ -17,7 +17,7 @@ def generate_grf_field(
     E_max: float = 8.0,
     sigma_g: float = 1.0,
     ell: float = 1.0,
-    seed: int = 42,
+    seed: int = 123,
     jitter: float = 1e-6,
 ) -> np.ndarray:
     """Generate one nodal GRF modulus field with an RBF covariance."""

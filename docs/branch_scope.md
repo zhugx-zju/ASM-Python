@@ -50,7 +50,7 @@ Case-folder pattern for the main workflows:
 Examples:
 
 ```text
-Geo_9x9_Mesh_39x39_Alpha_0.1111_Beta_-0.0556_Gamma_1e-06/
+Geo_9x9_Mesh_39x39_Alpha_0.3333_Beta_-0.0833_Gamma_1e-06/
 results/grid_study/forward/
 ```
 

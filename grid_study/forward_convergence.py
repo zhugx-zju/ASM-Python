@@ -33,6 +33,11 @@ from scipy.interpolate import RegularGridInterpolator
 
 from fgm_asm import MaterialInfo, MeshInfo, fem_assemble, forward_solver, generate_fgm_modulus
 from fgm_asm.mesh import setup_boundary_conditions
+from fgm_asm.visualization import (
+    plot_displacement_fields,
+    plot_modulus_distribution,
+    plot_single_displacement_field,
+)
 import config as cfg
 
 
@@ -111,11 +116,11 @@ def _style_axes(ax) -> None:
     ax.yaxis.set_major_formatter(FuncFormatter(_compact_tick))
 
 
-def _relative_l1(a: np.ndarray, b: np.ndarray) -> float:
+def _relative_linf(a: np.ndarray, b: np.ndarray) -> float:
     a = np.asarray(a, dtype=float)
     b = np.asarray(b, dtype=float)
-    denominator = float(np.sum(np.abs(b)))
-    return float(np.sum(np.abs(a - b)) / (denominator + 1e-15))
+    denominator = float(np.max(np.abs(b)))
+    return float(np.max(np.abs(a - b)) / (denominator + 1e-15))
 
 
 def _field_from_displacement(mesh_info: MeshInfo, U: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -248,12 +253,24 @@ def run_forward_case(
     }
 
 
+def _plot_case_results(case: dict, output_dir: Path) -> None:
+    """Save modulus and displacement contour figures for one mesh case."""
+    figures = [
+        plot_modulus_distribution(case["mesh"], case["E_field"], save_path=output_dir),
+        plot_displacement_fields(case["mesh"], case["U"], save_path=output_dir),
+        plot_single_displacement_field(case["mesh"], case["U"], component="ux", save_path=output_dir),
+        plot_single_displacement_field(case["mesh"], case["U"], component="uy", save_path=output_dir),
+    ]
+    for figure in figures:
+        plt.close(figure)
+
+
 def _write_metrics(rows: list[dict], output_dir: Path) -> Path:
     path = output_dir / "forward_grid_metrics.csv"
     columns = [
         "dataset", "nodes", "elements", "reference_nodes",
-        "relative_l1_ux_to_reference", "relative_l1_uy_to_reference",
-        "relative_l2_u_to_reference", "max_abs_u_difference",
+        "relative_linf_ux_to_reference", "relative_linf_uy_to_reference",
+        "maximum_relative_displacement_error", "max_abs_u_difference",
         "ux_norm", "uy_norm", "elapsed_time_seconds",
         "peak_python_memory_mb",
     ]
@@ -269,25 +286,13 @@ def _plot_metrics(rows: list[dict], output_dir: Path) -> tuple[Path, Path]:
     time_ax = error_ax.twinx()
     plot_nodes = sorted({int(row["nodes"]) for row in rows})
     reference_nodes = max(int(row["reference_nodes"]) for row in rows)
-    positive_errors = [
-        float(row["relative_l2_u_to_reference"])
-        for row in rows
-        if float(row["relative_l2_u_to_reference"]) > 0.0
-    ]
-    error_floor = min(positive_errors) * 0.5
     for dataset in sorted({row["dataset"] for row in rows}):
         subset = sorted((row for row in rows if row["dataset"] == dataset), key=lambda r: r["nodes"])
-        nodes = [row["nodes"] for row in subset]
         style = DATASET_STYLES[dataset]
-        error_values = [
-            float(row["relative_l2_u_to_reference"])
-            if float(row["relative_l2_u_to_reference"]) > 0.0
-            else error_floor
-            for row in subset
-        ]
+        accuracy_subset = [row for row in subset if int(row["nodes"]) < reference_nodes]
         error_ax.plot(
-            nodes,
-            error_values,
+            [row["nodes"] for row in accuracy_subset],
+            [float(row["maximum_relative_displacement_error"]) for row in accuracy_subset],
             color=style["color"],
             marker=style["marker"],
             linestyle="-",
@@ -295,8 +300,8 @@ def _plot_metrics(rows: list[dict], output_dir: Path) -> tuple[Path, Path]:
             markersize=4.5,
         )
         time_ax.plot(
-            nodes,
-            [row["elapsed_time_seconds"] for row in subset],
+            [row["nodes"] for row in subset],
+            [float(row["elapsed_time_seconds"]) for row in subset],
             color=style["color"],
             marker=style["marker"],
             linestyle="--",
@@ -305,7 +310,9 @@ def _plot_metrics(rows: list[dict], output_dir: Path) -> tuple[Path, Path]:
         )
 
     error_ax.set_xlabel("Nodes per direction")
-    error_ax.set_ylabel(f"Relative L2 difference to {reference_nodes} x {reference_nodes} mesh")
+    error_ax.set_ylabel(
+        f"Maximum relative displacement error to {reference_nodes} x {reference_nodes} mesh"
+    )
     error_ax.set_xscale("log", base=2)
     error_ax.set_yscale("log")
     tick_nodes = [nodes for nodes in plot_nodes if nodes != reference_nodes]
@@ -323,41 +330,60 @@ def _plot_metrics(rows: list[dict], output_dir: Path) -> tuple[Path, Path]:
     _style_axes(time_ax)
     error_ax.yaxis.set_major_formatter(LogFormatterMathtext())
     time_ax.yaxis.set_major_formatter(LogFormatterMathtext())
-    time_ax.yaxis.set_major_locator(LogLocator(base=10))
-    time_ax.yaxis.set_minor_locator(LogLocator(base=10, subs=np.arange(2, 10) * 0.1))
+    time_ax.yaxis.set_major_locator(LogLocator(base=10, numticks=12))
+    time_ax.yaxis.set_minor_locator(
+        LogLocator(base=10, subs=np.arange(2, 10) * 0.1, numticks=100)
+    )
     time_ax.tick_params(axis="x", bottom=False, labelbottom=False)
-    time_ax.tick_params(axis="y", left=False, right=True, labelleft=False, labelright=True)
+    time_ax.tick_params(
+        axis="y",
+        which="major",
+        left=False,
+        right=True,
+        labelleft=False,
+        labelright=True,
+    )
+    time_ax.tick_params(
+        axis="y",
+        which="minor",
+        left=False,
+        right=True,
+        length=2.8,
+        width=0.75,
+    )
     time_ax.spines["bottom"].set_visible(False)
     time_ax.spines["left"].set_visible(False)
 
-    legend_handles = []
+    error_handles = []
+    time_handles = []
     for dataset in ("bil", "exp", "grf"):
         style = DATASET_STYLES[dataset]
         name = dataset.upper()
-        legend_handles.extend(
-            [
-                Line2D(
-                    [0], [0], color=style["color"], marker=style["marker"],
-                    linestyle="-", linewidth=1.8, markersize=4.5,
-                    label=rf"{name}, error (solid)",
-                ),
-                Line2D(
-                    [0], [0], color=style["color"], marker=style["marker"],
-                    linestyle="--", linewidth=1.8, markersize=4.5,
-                    label=rf"{name}, time (dashed)",
-                ),
-            ]
+        error_handles.append(
+            Line2D(
+                [0], [0], color=style["color"], marker=style["marker"],
+                linestyle="-", linewidth=1.8, markersize=4.5,
+                label=rf"{name}, max. error (solid)",
+            )
         )
+        time_handles.append(
+            Line2D(
+                [0], [0], color=style["color"], marker=style["marker"],
+                linestyle="--", linewidth=1.8, markersize=4.5,
+                label=rf"{name}, time (dashed)",
+            )
+        )
+    legend_handles = error_handles + time_handles
     error_ax.legend(
         legend_handles,
         [handle.get_label() for handle in legend_handles],
         loc="upper center",
         bbox_to_anchor=(0.5, 0.97),
-        ncol=3,
+        ncol=2,
         fontsize=8.0,
         frameon=False,
         handlelength=2.4,
-        columnspacing=0.9,
+        columnspacing=1.4,
         handletextpad=0.5,
         labelspacing=0.55,
     )
@@ -388,6 +414,7 @@ def _plot_profile_panel(
     y_values: np.ndarray,
     inset_anchor: tuple[float, float],
     panel_label: str,
+    profile_pad_fraction: float = 0.06,
 ) -> tuple[list, list]:
     """Draw one displacement component and its local convergence inset."""
     displacement_scale = 1e3
@@ -425,16 +452,21 @@ def _plot_profile_panel(
     x_margin = float(y_values[-1] - y_values[0]) * 0.02
     ax.set_xlim(float(y_values[0]) - x_margin, float(y_values[-1]) + x_margin)
     profile_range = float(np.ptp(profile_matrix))
-    profile_pad = max(profile_range * 0.06, np.finfo(float).eps)
+    profile_pad = max(profile_range * profile_pad_fraction, np.finfo(float).eps)
     ax.set_ylim(float(np.min(profile_matrix)) - profile_pad, float(np.max(profile_matrix)) + profile_pad)
     ax.set_box_aspect(1.0)
     ax.xaxis.set_major_locator(MultipleLocator(2))
-    ax.yaxis.set_major_locator(
-        MultipleLocator(1.0 if component == "ux" else 0.5)
-    )
+    y_locator = MaxNLocator(nbins=5, steps=[1, 2, 2.5, 5, 10])
+    ax.yaxis.set_major_locator(y_locator)
     _style_axes(ax)
     ax.xaxis.set_major_formatter(FormatStrFormatter("%.0f"))
-    ax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
+    y_ticks = y_locator.tick_values(
+        float(np.min(profile_matrix)) - profile_pad,
+        float(np.max(profile_matrix)) + profile_pad,
+    )
+    y_step = float(np.min(np.diff(y_ticks))) if len(y_ticks) > 1 else 1.0
+    y_decimals = max(1, int(np.ceil(-np.log10(abs(y_step)))))
+    ax.yaxis.set_major_formatter(FormatStrFormatter(f"%.{y_decimals}f"))
     ax.tick_params(axis="both", labelsize=10.5, width=0.9, length=4.5)
     ax.text(
         -0.12,
@@ -531,7 +563,7 @@ def _plot_edge_dataset(
     fig, axes = plt.subplots(1, 2, figsize=(13.2, 5.6), sharex=True)
     panel_specs = (
         ("ux", (0.50, 0.12), "a"),
-        ("uy", (0.22, 0.12), "b"),
+        ("uy", (0.22, 0.06 if dataset == "bil" else 0.12), "b"),
     )
     handles = labels = None
     for ax, (component, inset_anchor, panel_label) in zip(axes, panel_specs):
@@ -543,6 +575,13 @@ def _plot_edge_dataset(
             y_values,
             inset_anchor,
             panel_label,
+            profile_pad_fraction=(
+                0.30
+                if dataset == "bil" and component == "uy"
+                else 0.14
+                if dataset == "bil"
+                else 0.06
+            ),
         )
         if handles is None:
             handles, labels = panel_handles, panel_labels
@@ -664,6 +703,7 @@ def run_forward_grid_study(
                 ),
                 encoding="utf-8",
             )
+            _plot_case_results(case, case_dir)
             manifest["cases"].append({
                 "dataset": normalized,
                 "nodes": nodes,
@@ -688,10 +728,11 @@ def run_forward_grid_study(
                 "nodes": nodes,
                 "elements": nodes - 1,
                 "reference_nodes": reference_nodes,
-                "relative_l1_ux_to_reference": _relative_l1(case["ux"], ux_ref),
-                "relative_l1_uy_to_reference": _relative_l1(case["uy"], uy_ref),
-                "relative_l2_u_to_reference": float(
-                    np.linalg.norm(u_case - u_ref) / (np.linalg.norm(u_ref) + 1e-15)
+                "relative_linf_ux_to_reference": _relative_linf(case["ux"], ux_ref),
+                "relative_linf_uy_to_reference": _relative_linf(case["uy"], uy_ref),
+                "maximum_relative_displacement_error": max(
+                    _relative_linf(case["ux"], ux_ref),
+                    _relative_linf(case["uy"], uy_ref),
                 ),
                 "max_abs_u_difference": float(np.max(np.abs(u_case - u_ref))),
                 "ux_norm": float(np.linalg.norm(case["ux"])),

@@ -22,8 +22,8 @@ NEL_Y = 39  # Number of elements in y direction
 
 # Material properties
 F_TOT = 0.01     # Total applied force
-EX = 2.0        # Modulus ratio at x = geo_l
-EY = 0.5        # Modulus ratio at y = geo_h
+EX = 4.0        # Modulus ratio at x = geo_l
+EY = 0.25       # Modulus ratio at y = geo_h
 NU = 0.3        # Poisson's ratio
 
 # Distribution type: 'bil' (bilinear), 'exp' (exponential), or 'grf'
@@ -33,7 +33,7 @@ DIS_TYPE = 'bil'
 GRF_E_MAX = 8.0
 GRF_SIGMA_G = 1.0
 GRF_ELL = 25.0
-GRF_SEED = 42
+GRF_SEED = 123
 
 
 # ============================================================
