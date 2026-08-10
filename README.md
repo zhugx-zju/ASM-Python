@@ -153,6 +153,9 @@ write and search the same root-level case folders even when launched with
 | `script/plot_forward_results.py` | Reloads saved forward results and exports standalone forward-problem figures. |
 | `script/plot_inverse_results.py` | Reloads saved inverse results and exports reconstruction, convergence, gradient, and scan-vs-rerun comparison plots. |
 | `script/plot_lcurve.py` | Reloads saved L-curve data and exports the L-curve and curvature figures. |
+| `grid_study/demo_data.py` | Loads demo data and source-generation metadata; exposes parameter-driven mesh generation and reference-data validation. |
+| `grid_study/distributions.py` | Generates selected BIL/EXP fields from `alpha/beta` and selected GRF fields from stored GRF parameters. |
+| `grid_study/inverse_convergence.py` | Runs a resumable fixed-gamma inverse mesh/noise study after gamma is selected on an explicit reference grid. |
 | `docs/branch_scope.md` | Lightweight branch-management note describing the role of `main`, `disp_linear`, and `disp_nonlinear`. |
 | `docs/validation.md` | Lightweight validation checklist and record template for each research branch. |
 
@@ -191,6 +194,57 @@ random-field generator. It follows `GRF_Generate.m` using an RBF covariance,
 the `tanh` map to `[0, E_max]`, and a reproducible seed. The batch dataset
 dimension and `E_max` shuffle from the MATLAB data-generation script are not
 part of this repository's one-case forward workflow.
+
+## Imported Demo Distributions
+
+The repository also contains a compact, solver-facing copy of the three demo
+cases from `comparison_sample_GN`:
+
+```text
+demo_distributions/
+|-- demo_cases.json
+|-- bil/sample_600/true_modulus.npy
+|-- exp/sample_200/true_modulus.npy
+`-- grf/sample_410/true_modulus.npy
+```
+
+Each case has `noise_0`, `noise_2`, `noise_4`, `noise_6`, `noise_8`, and
+`noise_10` measured-displacement files. `demo_cases.json` is the single source
+of truth for sample indices, original batch indices, BIL/EXP coefficients,
+GRF parameters, geometry, and noise seeds. Legacy ASM predictions, L-curve
+files, and U-Net outputs are deliberately excluded.
+
+Run the self-contained demo-data forward grid study by directly running:
+
+```text
+script/forward_grid_convergence.py
+```
+
+To run the original parameter-driven BIL/EXP grid study instead, set
+`EX` and `EY` in `config.py`, then directly run:
+
+```text
+script/forward_original_grid_convergence.py
+```
+
+This keeps the original `10, 20, 30, 40, 60, 80, 100` node cases and writes
+its results to `results/grid_study/forward_original`.
+
+The demo runner uses `demo_distributions` from this repository by default.
+The original runner sets `demo_root=None`, so BIL and EXP fields are evaluated
+from the `EX` and `EY` values on every target mesh, while the GRF field is
+generated from the configured GRF parameters without loading demo data.
+
+The inverse grid study also uses the repository copy by default. For every
+target mesh it solves the forward problem for the parameter-generated true
+field and creates that mesh's requested noise level from the clean
+displacement. The imported displacement files remain reference data for the
+40 x 40 demo case. It still requires an explicit `--reference-nodes` and a
+gamma selected beforehand on that reference grid:
+
+```bash
+python -m grid_study.inverse_convergence --reference-nodes 40 --gamma 1e-6
+```
 
 ## Inverse Problem Options
 

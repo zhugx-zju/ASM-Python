@@ -1,44 +1,51 @@
 """Batch forward-problem mesh convergence study.
 
-This module intentionally covers only the forward problem. It evaluates the
-same analytical BIL/EXP field, or one reference GRF field interpolated from
-the finest mesh, on each mesh and compares every mesh with the finest mesh.
-Inverse gamma selection is deliberately outside this workflow.
+This module intentionally covers only the forward problem. It evaluates each
+selected demo sample from its source distribution parameters on every mesh
+and compares every mesh with the finest mesh. Inverse gamma selection is
+deliberately outside this workflow.
 """
 
 from __future__ import annotations
 
-import csv
 import json
 import pickle
-import time
-import tracemalloc
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import rcParams
 from matplotlib.lines import Line2D
 from matplotlib.patches import ConnectionPatch, Rectangle
 from matplotlib.ticker import (
     FormatStrFormatter,
-    FuncFormatter,
     LogFormatterMathtext,
     LogLocator,
     MaxNLocator,
     MultipleLocator,
 )
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from scipy.interpolate import RegularGridInterpolator
 
-from fgm_asm import MaterialInfo, MeshInfo, fem_assemble, forward_solver, generate_fgm_modulus
-from fgm_asm.mesh import setup_boundary_conditions
+from fgm_asm import MeshInfo
+from fgm_asm.config_types import ForwardConfig
 from fgm_asm.visualization import (
     plot_displacement_fields,
     plot_modulus_distribution,
     plot_single_displacement_field,
 )
-import config as cfg
+from grid_study.demo_data import DEFAULT_DEMO_ROOT, load_demo_dataset
+from grid_study.distributions import validate_demo_modulus
+from grid_study.case_runner import (
+    interpolate_field as _interpolate_field,
+    make_grf_reference,
+    run_forward_case,
+)
+from grid_study.plot_style import (
+    DATASET_STYLES,
+    compact_tick as _compact_tick,
+    style_axes as _style_axes,
+)
+from grid_study.study_io import write_csv_rows
+from grid_study.study_metrics import relative_linf as _relative_linf
 
 
 DEFAULT_DATASETS = ("bil", "exp", "grf")
@@ -80,71 +87,6 @@ MESH_LINEWIDTHS = {
     100: 1.5,
     200: 1.4,
 }
-DATASET_STYLES = {
-    "bil": {"color": "#1f77b4", "marker": "o", "linestyle": "-"},
-    "exp": {"color": "#ff7f0e", "marker": "s", "linestyle": "--"},
-    "grf": {"color": "#2ca02c", "marker": "^", "linestyle": "-."},
-}
-
-rcParams["font.family"] = "serif"
-rcParams["font.serif"] = ["Times New Roman"]
-rcParams["mathtext.fontset"] = "custom"
-rcParams["mathtext.rm"] = "Times New Roman"
-rcParams["mathtext.it"] = "Times New Roman:italic"
-rcParams["axes.linewidth"] = 1.0
-
-
-def _compact_tick(value: float, _position: int) -> str:
-    """Format ticks without trailing zeros or unnecessary decimal places."""
-    if abs(value) < 1e-12:
-        return "0"
-    return f"{value:g}"
-
-
-def _style_axes(ax) -> None:
-    ax.grid(False)
-    ax.tick_params(
-        axis="both",
-        which="both",
-        direction="in",
-        top=False,
-        right=False,
-        width=0.9,
-        length=4.5,
-    )
-    ax.xaxis.set_major_formatter(FuncFormatter(_compact_tick))
-    ax.yaxis.set_major_formatter(FuncFormatter(_compact_tick))
-
-
-def _relative_linf(a: np.ndarray, b: np.ndarray) -> float:
-    a = np.asarray(a, dtype=float)
-    b = np.asarray(b, dtype=float)
-    denominator = float(np.max(np.abs(b)))
-    return float(np.max(np.abs(a - b)) / (denominator + 1e-15))
-
-
-def _field_from_displacement(mesh_info: MeshInfo, U: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Convert interleaved nodal displacement to [y, x] fields."""
-    ux = np.asarray(U[0::2], dtype=float)
-    uy = np.asarray(U[1::2], dtype=float)
-    return (
-        ux.reshape(mesh_info.nods_y, mesh_info.nods_x, order="C"),
-        uy.reshape(mesh_info.nods_y, mesh_info.nods_x, order="C"),
-    )
-
-
-def _interpolate_field(field: np.ndarray, source_mesh: MeshInfo, target_mesh: MeshInfo) -> np.ndarray:
-    x_source = np.asarray(source_mesh.plot_x[0, :], dtype=float)
-    y_source = np.asarray(source_mesh.plot_y[:, 0], dtype=float)
-    interpolator = RegularGridInterpolator(
-        (y_source, x_source),
-        np.asarray(field, dtype=float),
-        bounds_error=True,
-    )
-    points = np.column_stack((target_mesh.Y, target_mesh.X))
-    return interpolator(points).reshape(target_mesh.nods_y, target_mesh.nods_x)
-
-
 def _interpolate_right_boundary_profile(
     field: np.ndarray,
     mesh_info: MeshInfo,
@@ -154,103 +96,6 @@ def _interpolate_right_boundary_profile(
     y_nodes = np.asarray(mesh_info.plot_y[:, 0], dtype=float)
     edge_values = np.asarray(field, dtype=float)[:, -1]
     return np.interp(y_values, y_nodes, edge_values)
-
-
-def _measure_case(func, repeats: int = 5):
-    """Measure steady-state wall time and Python allocation peak separately.
-
-    A single measurement is dominated by one-time SciPy/BLAS initialization
-    for very small meshes. Warm up once, use the median of repeated wall-time
-    measurements, and run ``tracemalloc`` only for the independent memory
-    measurement so the tracer does not distort the reported time.
-    """
-    if repeats < 1:
-        raise ValueError(f"repeats must be positive, got {repeats}")
-
-    func()  # Warm up one-time numerical-library initialization.
-    timings = []
-    value = None
-    for _ in range(repeats):
-        start = time.perf_counter()
-        value = func()
-        timings.append(time.perf_counter() - start)
-
-    tracemalloc.start()
-    try:
-        func()
-        _, peak_bytes = tracemalloc.get_traced_memory()
-    finally:
-        tracemalloc.stop()
-
-    return value, float(np.median(timings)), float(peak_bytes / 1024**2)
-
-
-def run_forward_case(
-    dis_type: str,
-    nodes: int,
-    grf_reference: dict | None = None,
-) -> dict:
-    if nodes < 2:
-        raise ValueError(f"nodes must be at least 2, got {nodes}")
-
-    forward_config = cfg.get_forward_config()
-    mesh = MeshInfo(
-        forward_config.geo_l,
-        forward_config.geo_h,
-        int(nodes) - 1,
-        int(nodes) - 1,
-    )
-
-    def solve():
-        if dis_type == "grf" and grf_reference is not None:
-            material_info = MaterialInfo(nu=forward_config.nu, dis_type="grf")
-            E_field = _interpolate_field(
-                grf_reference["E_field"],
-                grf_reference["mesh"],
-                mesh,
-            )
-        else:
-            E_field, material_info = generate_fgm_modulus(
-                mesh,
-                dis_type=dis_type,
-                Ex=forward_config.Ex,
-                Ey=forward_config.Ey,
-                grf_E_max=forward_config.grf_E_max,
-                grf_sigma_g=forward_config.grf_sigma_g,
-                grf_ell=forward_config.grf_ell,
-                grf_seed=forward_config.grf_seed,
-            )
-        material_info.nu = forward_config.nu
-        material_info.update(E_field.ravel(order="C"), iteration=1)
-        bc_info = setup_boundary_conditions(
-            mesh,
-            forward_config.geo_l,
-            forward_config.geo_h,
-            forward_config.f_tot,
-        )
-        fem_info = fem_assemble(mesh, material_info, bc_info)
-        U = forward_solver(fem_info)
-        return mesh, bc_info, E_field, U
-
-    (mesh, bc_info, E_field, U), elapsed, peak_python_mb = _measure_case(solve)
-    ux, uy = _field_from_displacement(mesh, U)
-    case_config = forward_config.to_dict()
-    case_config["nel_x"] = int(nodes - 1)
-    case_config["nel_y"] = int(nodes - 1)
-    return {
-        "dataset": dis_type,
-        "nodes": int(nodes),
-        "elements": int(nodes - 1),
-        "mesh": mesh,
-        "bc_info": bc_info,
-        "E_field": np.asarray(E_field, dtype=float),
-        "U": np.asarray(U, dtype=float),
-        "ux": ux,
-        "uy": uy,
-        "elapsed_time_seconds": elapsed,
-        "peak_python_memory_mb": peak_python_mb,
-        "config": case_config,
-    }
 
 
 def _plot_case_results(case: dict, output_dir: Path) -> None:
@@ -274,11 +119,7 @@ def _write_metrics(rows: list[dict], output_dir: Path) -> Path:
         "ux_norm", "uy_norm", "elapsed_time_seconds",
         "peak_python_memory_mb",
     ]
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=columns)
-        writer.writeheader()
-        writer.writerows({key: row.get(key, "") for key in columns} for row in rows)
-    return path
+    return write_csv_rows(rows, path, columns)
 
 
 def _plot_metrics(rows: list[dict], output_dir: Path) -> tuple[Path, Path]:
@@ -396,14 +237,65 @@ def _plot_metrics(rows: list[dict], output_dir: Path) -> tuple[Path, Path]:
     return png_path, pdf_path
 
 
+def _plot_forward_time(rows: list[dict], output_dir: Path) -> tuple[Path, Path]:
+    """Save a standalone log-scale forward-solve time figure."""
+    fig, ax = plt.subplots(figsize=(7.2, 6.4))
+    plot_nodes = sorted({int(row["nodes"]) for row in rows})
+
+    for dataset in sorted({row["dataset"] for row in rows}):
+        subset = sorted(
+            (row for row in rows if row["dataset"] == dataset),
+            key=lambda row: int(row["nodes"]),
+        )
+        style = DATASET_STYLES[dataset]
+        ax.plot(
+            [int(row["nodes"]) for row in subset],
+            [float(row["elapsed_time_seconds"]) for row in subset],
+            color=style["color"],
+            marker=style["marker"],
+            linestyle="--",
+            linewidth=1.8,
+            markersize=4.5,
+            label=dataset.upper(),
+        )
+
+    ax.set_xlabel("Nodes per direction")
+    ax.set_ylabel("Forward solve time (s)")
+    ax.set_xscale("log", base=2)
+    ax.set_yscale("log", base=10)
+    ax.set_xticks(plot_nodes)
+    ax.set_xticklabels([str(nodes) for nodes in plot_nodes])
+    ax.set_box_aspect(1.0)
+    _style_axes(ax)
+    ax.yaxis.set_major_formatter(LogFormatterMathtext())
+    ax.yaxis.set_major_locator(LogLocator(base=10, numticks=12))
+    ax.yaxis.set_minor_locator(
+        LogLocator(base=10, subs=np.arange(2, 10) * 0.1, numticks=100)
+    )
+    ax.tick_params(axis="y", which="minor", length=2.8, width=0.75)
+    ax.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.98),
+        ncol=3,
+        fontsize=10.0,
+        frameon=False,
+        handlelength=2.4,
+        columnspacing=1.5,
+        handletextpad=0.5,
+    )
+
+    png_path = output_dir / "forward_solve_time.png"
+    pdf_path = output_dir / "forward_solve_time.pdf"
+    fig.savefig(png_path, dpi=1200, bbox_inches="tight")
+    fig.savefig(pdf_path, bbox_inches="tight")
+    plt.close(fig)
+    return png_path, pdf_path
+
+
 def _write_edge_profiles(profile_rows: list[dict], output_dir: Path) -> Path:
     path = output_dir / "forward_edge_profiles.csv"
     columns = ["dataset", "nodes", "y", "ux", "uy"]
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=columns)
-        writer.writeheader()
-        writer.writerows({key: row[key] for key in columns} for row in profile_rows)
-    return path
+    return write_csv_rows(profile_rows, path, columns)
 
 
 def _plot_profile_panel(
@@ -632,9 +524,11 @@ def _plot_edge_profiles(
 
 
 def run_forward_grid_study(
+    forward_config: ForwardConfig,
     datasets: tuple[str, ...] = DEFAULT_DATASETS,
     nodes_list: tuple[int, ...] = DEFAULT_NODES,
     output_dir: Path | str = "results/grid_study/forward",
+    demo_root: Path | str | None = DEFAULT_DEMO_ROOT,
 ) -> Path:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -649,7 +543,9 @@ def run_forward_grid_study(
         "datasets": list(datasets),
         "nodes": list(nodes_list),
         "reference_nodes": max(nodes_list),
-        "config": cfg.get_forward_config().to_dict(),
+        "config": forward_config.to_dict(),
+        "data_source": "parameterized_demo_distributions" if demo_root is not None else "analytical_repository_fields",
+        "demo_validation": [],
         "cases": [],
     }
 
@@ -658,25 +554,26 @@ def run_forward_grid_study(
         if normalized not in {"bil", "exp", "grf"}:
             raise ValueError(f"Forward grid study supports only bil/exp/grf, got {dataset!r}")
         raw_cases[normalized] = {}
+        demo_data = load_demo_dataset(normalized, demo_root) if demo_root is not None else None
+        if demo_data is not None:
+            validation = validate_demo_modulus(demo_data, nu=forward_config.nu)
+            if not validation["matches"]:
+                raise ValueError(
+                    f"Parameter-generated {normalized} demo does not reproduce its "
+                    f"40x40 reference field: max difference={validation['max_absolute_difference']:.3e}"
+                )
+            manifest["demo_validation"].append(validation)
         grf_reference = None
-        if normalized == "grf":
-            reference_mesh = MeshInfo(
-                cfg.get_forward_config().geo_l,
-                cfg.get_forward_config().geo_h,
-                reference_nodes - 1,
-                reference_nodes - 1,
-            )
-            reference_field, _ = generate_fgm_modulus(
-                reference_mesh,
-                dis_type="grf",
-                grf_E_max=cfg.get_forward_config().grf_E_max,
-                grf_sigma_g=cfg.get_forward_config().grf_sigma_g,
-                grf_ell=cfg.get_forward_config().grf_ell,
-                grf_seed=cfg.get_forward_config().grf_seed,
-            )
-            grf_reference = {"mesh": reference_mesh, "E_field": reference_field}
+        if normalized == "grf" and demo_data is None:
+            grf_reference = make_grf_reference(forward_config, reference_nodes)
         for nodes in nodes_list:
-            case = run_forward_case(normalized, nodes, grf_reference=grf_reference)
+            case = run_forward_case(
+                normalized,
+                nodes,
+                forward_config=forward_config,
+                grf_reference=grf_reference,
+                demo_data=demo_data,
+            )
             raw_cases[normalized][nodes] = case
             case_dir = output_dir / normalized / f"nodes_{nodes}"
             case_dir.mkdir(parents=True, exist_ok=True)
@@ -698,7 +595,13 @@ def run_forward_grid_study(
                 )
             (case_dir / "config.json").write_text(
                 json.dumps(
-                    {"dataset": normalized, "nodes": nodes, "elements": nodes - 1, "config": case["config"]},
+                    {
+                        "dataset": normalized,
+                        "nodes": nodes,
+                        "elements": nodes - 1,
+                        "data_source": manifest["data_source"],
+                        "config": case["config"],
+                    },
                     indent=2,
                 ),
                 encoding="utf-8",
@@ -713,7 +616,7 @@ def run_forward_grid_study(
 
     metric_rows = []
     profile_rows = []
-    y_values = np.linspace(0.0, float(cfg.get_forward_config().geo_h), 181)
+    y_values = np.linspace(0.0, float(forward_config.geo_h), 181)
     for dataset in datasets:
         normalized_dataset = str(dataset).lower()
         reference = raw_cases[normalized_dataset][reference_nodes]
@@ -755,7 +658,7 @@ def run_forward_grid_study(
             )
 
     metrics_path = _write_metrics(metric_rows, output_dir)
-    figure_paths = _plot_metrics(metric_rows, output_dir)
+    figure_paths = (*_plot_metrics(metric_rows, output_dir), *_plot_forward_time(metric_rows, output_dir))
     edge_profile_csv = _write_edge_profiles(profile_rows, output_dir)
     edge_profile_figures = _plot_edge_profiles(
         raw_cases,

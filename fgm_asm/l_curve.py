@@ -268,7 +268,7 @@ def plot_lcurve_results(results_dict, save_path=None):
     ax1.set_xlabel(r'Data mismatch $||u - u_{obs}||_2$', fontsize=13)
     ax1.set_ylabel(r'Regularization $||\nabla E||_2$', fontsize=13)
     ax1.set_title('L-curve', fontsize=14, fontweight='bold')
-    ax1.legend(fontsize=11, loc='best')
+    ax1.legend(fontsize=11, loc='best', frameon=False)
     ax1.tick_params(labelsize=11)
     ax1.grid(True, which='both', alpha=0.3)
 
@@ -300,7 +300,7 @@ def plot_lcurve_results(results_dict, save_path=None):
     ax2.set_ylabel('Curvature', fontsize=13)
     ax2.set_title(r'Curvature vs $\gamma$', fontsize=14, fontweight='bold')
     ax2.set_xscale('log')
-    ax2.legend(fontsize=11, loc='best')
+    ax2.legend(fontsize=11, loc='best', frameon=False)
     ax2.tick_params(labelsize=11)
     ax2.grid(True, which='both', alpha=0.3)
 

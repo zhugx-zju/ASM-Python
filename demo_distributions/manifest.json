@@ -1,0 +1,114 @@
+{
+  "source": "comparison_sample_GN",
+  "datasets": {
+    "bil": {
+      "dataset": "bil",
+      "source_sample": "sample_600",
+      "source_distribution": "bil",
+      "sample_index": 600,
+      "source_sample_index": 18600,
+      "source_sample_number_matlab": 18601,
+      "source_index_base": "0-based numpy array index",
+      "fixed_test_set_start": 18000,
+      "source_nodes": 40,
+      "parameters": {
+        "alpha": -0.04231179569247182,
+        "beta": 0.21279811517859126,
+        "geometry": [9.0, 9.0],
+        "generator": "GFE_Generate.m",
+        "batch_size": 20000,
+        "distribution_ranges": {
+          "negative": [0.51, 1.0],
+          "positive": [1.0, 3.0]
+        },
+        "shuffle_seeds": {
+          "x": 2,
+          "y": 3
+        }
+      },
+      "target_file": "true_modulus.npy",
+      "noise_percentage": [
+        0.0,
+        2.0,
+        4.0,
+        6.0,
+        8.0,
+        10.0
+      ]
+    },
+    "exp": {
+      "dataset": "exp",
+      "source_sample": "sample_200",
+      "source_distribution": "exp",
+      "sample_index": 200,
+      "source_sample_index": 18200,
+      "source_sample_number_matlab": 18201,
+      "source_index_base": "0-based numpy array index",
+      "fixed_test_set_start": 18000,
+      "source_nodes": 40,
+      "parameters": {
+        "alpha": 0.11536483506621718,
+        "beta": -0.08183124028677852,
+        "geometry": [9.0, 9.0],
+        "generator": "GFE_Generate.m",
+        "batch_size": 20000,
+        "distribution_ranges": {
+          "negative": [0.1, 1.0],
+          "positive": [1.0, 3.0]
+        },
+        "shuffle_seeds": {
+          "x": 4,
+          "y": 6
+        }
+      },
+      "target_file": "true_modulus.npy",
+      "noise_percentage": [
+        0.0,
+        2.0,
+        4.0,
+        6.0,
+        8.0,
+        10.0
+      ]
+    },
+    "grf": {
+      "dataset": "grf",
+      "source_sample": "sample_410",
+      "source_distribution": "grf",
+      "sample_index": 410,
+      "source_sample_index": 18410,
+      "source_sample_number_matlab": 18411,
+      "source_index_base": "0-based numpy array index",
+      "fixed_test_set_start": 18000,
+      "source_nodes": 40,
+      "parameters": {
+        "E_max": 5.222611130556528,
+        "sigma_g": 1.0,
+        "ell": 25.0,
+        "jitter": 1e-6,
+        "geometry": [9.0, 9.0],
+        "generator": "GRF_Generate.m",
+        "batch_size": 20000,
+        "E_max_range": [1.0, 8.0],
+        "shuffle_seed": 4,
+        "realization_source": "source_40x40_field_in_latent_gaussian_space"
+      },
+      "target_file": "true_modulus.npy",
+      "noise_percentage": [
+        0.0,
+        2.0,
+        4.0,
+        6.0,
+        8.0,
+        10.0
+      ]
+    }
+  },
+  "excluded_files": [
+    "pred",
+    "rel_err",
+    "asm_results.pkl",
+    "lcurve_analysis_GN.pkl",
+    "U-Net outputs"
+  ]
+}

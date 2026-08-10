@@ -118,6 +118,7 @@ def generate_fgm_modulus(
     grf_sigma_g=1.0,
     grf_ell=1.0,
     grf_seed=123,
+    nu=0.3,
 ):
     """
     Generate FGM modulus field for forward problem.
@@ -140,7 +141,7 @@ def generate_fgm_modulus(
             ell=grf_ell,
             seed=grf_seed,
         )
-        return E_field, MaterialInfo(nu=0.3, dis_type='grf')
+        return E_field, MaterialInfo(nu=nu, dis_type='grf')
 
     if dis_type not in {'bil', 'exp'}:
         raise ValueError(f"Unknown distribution type: {dis_type!r}")
@@ -157,7 +158,7 @@ def generate_fgm_modulus(
         beta = np.log(Ey) / geo_h
 
     # Create material info
-    material_info = MaterialInfo(nu=0.3, dis_type=dis_type, alpha=alpha, beta=beta)
+    material_info = MaterialInfo(nu=nu, dis_type=dis_type, alpha=alpha, beta=beta)
 
     # Generate modulus field
     E_field = material_info.get_modulus_field(mesh_info.coord)

@@ -1,0 +1,32 @@
+{
+  "dataset": "grf",
+  "source_sample": "sample_410",
+  "source_distribution": "grf",
+  "sample_index": 410,
+  "source_sample_index": 18410,
+  "source_sample_number_matlab": 18411,
+  "source_index_base": "0-based numpy array index",
+  "fixed_test_set_start": 18000,
+  "source_nodes": 40,
+  "parameters": {
+    "E_max": 5.222611130556528,
+    "sigma_g": 1.0,
+    "ell": 25.0,
+    "jitter": 1e-6,
+    "geometry": [9.0, 9.0],
+    "generator": "GRF_Generate.m",
+    "batch_size": 20000,
+    "E_max_range": [1.0, 8.0],
+    "shuffle_seed": 4,
+    "realization_source": "source_40x40_field_in_latent_gaussian_space"
+  },
+  "target_file": "true_modulus.npy",
+  "noise_percentage": [
+    0.0,
+    2.0,
+    4.0,
+    6.0,
+    8.0,
+    10.0
+  ]
+}

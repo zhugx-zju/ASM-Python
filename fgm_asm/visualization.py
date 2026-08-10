@@ -326,7 +326,7 @@ def plot_iteration_history(results, save_path=None, noise_level=0.0, filename_st
     axes[0].set_xlabel('Iteration', fontsize=13)
     axes[0].set_ylabel('Objective Function Value', fontsize=13)
     axes[0].set_title('Convergence History', fontsize=15, fontweight='bold')
-    axes[0].legend(fontsize=11, loc='best')
+    axes[0].legend(fontsize=11, loc='best', frameon=False)
     axes[0].grid(True, alpha=0.3, linestyle='--')
     axes[0].tick_params(labelsize=11)
 

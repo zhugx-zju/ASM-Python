@@ -51,7 +51,8 @@ E_field, material_info = generate_fgm_modulus(
     mesh_info,
     dis_type=config.dis_type,
     Ex=config.Ex,
-    Ey=config.Ey
+    Ey=config.Ey,
+    nu=config.nu,
 )
 material_info.nu = config.nu
 print(f"  Alpha: {material_info.alpha:.6f}")

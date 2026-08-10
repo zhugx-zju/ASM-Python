@@ -1,0 +1,35 @@
+{
+  "dataset": "exp",
+  "source_sample": "sample_200",
+  "source_distribution": "exp",
+  "sample_index": 200,
+  "source_sample_index": 18200,
+  "source_sample_number_matlab": 18201,
+  "source_index_base": "0-based numpy array index",
+  "fixed_test_set_start": 18000,
+  "source_nodes": 40,
+  "parameters": {
+    "alpha": 0.11536483506621718,
+    "beta": -0.08183124028677852,
+    "geometry": [9.0, 9.0],
+    "generator": "GFE_Generate.m",
+    "batch_size": 20000,
+    "distribution_ranges": {
+      "negative": [0.1, 1.0],
+      "positive": [1.0, 3.0]
+    },
+    "shuffle_seeds": {
+      "x": 4,
+      "y": 6
+    }
+  },
+  "target_file": "true_modulus.npy",
+  "noise_percentage": [
+    0.0,
+    2.0,
+    4.0,
+    6.0,
+    8.0,
+    10.0
+  ]
+}
