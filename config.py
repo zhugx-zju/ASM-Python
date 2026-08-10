@@ -34,7 +34,7 @@ DIS_TYPE = 'bil'
 # Gaussian random field parameters (used when DIS_TYPE = 'grf')
 GRF_E_MAX = 8.0
 GRF_SIGMA_G = 1.0
-GRF_ELL = 1.0
+GRF_ELL = 25.0
 GRF_SEED = 42
 
 
