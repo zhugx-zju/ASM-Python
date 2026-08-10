@@ -147,16 +147,33 @@ def _interpolate_right_boundary_profile(
     return np.interp(y_values, y_nodes, edge_values)
 
 
-def _measure_case(func):
-    """Measure wall time and Python allocation peak for one forward case."""
-    tracemalloc.start()
-    start = time.perf_counter()
-    try:
+def _measure_case(func, repeats: int = 5):
+    """Measure steady-state wall time and Python allocation peak separately.
+
+    A single measurement is dominated by one-time SciPy/BLAS initialization
+    for very small meshes. Warm up once, use the median of repeated wall-time
+    measurements, and run ``tracemalloc`` only for the independent memory
+    measurement so the tracer does not distort the reported time.
+    """
+    if repeats < 1:
+        raise ValueError(f"repeats must be positive, got {repeats}")
+
+    func()  # Warm up one-time numerical-library initialization.
+    timings = []
+    value = None
+    for _ in range(repeats):
+        start = time.perf_counter()
         value = func()
-    finally:
+        timings.append(time.perf_counter() - start)
+
+    tracemalloc.start()
+    try:
+        func()
         _, peak_bytes = tracemalloc.get_traced_memory()
+    finally:
         tracemalloc.stop()
-    return value, float(time.perf_counter() - start), float(peak_bytes / 1024**2)
+
+    return value, float(np.median(timings)), float(peak_bytes / 1024**2)
 
 
 def run_forward_case(
