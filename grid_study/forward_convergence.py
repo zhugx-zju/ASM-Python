@@ -37,7 +37,7 @@ import config as cfg
 
 
 DEFAULT_DATASETS = ("bil", "exp", "grf")
-DEFAULT_NODES = (4, 10, 20, 40, 80, 100)
+DEFAULT_NODES = (4, 10, 20, 40, 80, 100, 200)
 
 MESH_COLORS = {
     4: "#1f77b4",
@@ -46,6 +46,7 @@ MESH_COLORS = {
     40: "#d62728",
     80: "#9467bd",
     100: "#000000",
+    200: "#7f7f7f",
 }
 MESH_MARKERS = {
     4: "o",
@@ -54,6 +55,7 @@ MESH_MARKERS = {
     40: "D",
     80: "P",
     100: "X",
+    200: "v",
 }
 MESH_LINESTYLES = {
     4: "-",
@@ -62,6 +64,7 @@ MESH_LINESTYLES = {
     40: ":",
     80: (0, (5, 1, 1, 1)),
     100: (0, (1, 1)),
+    200: (0, (3, 1, 1, 1)),
 }
 MESH_LINEWIDTHS = {
     4: 1.8,
@@ -70,6 +73,7 @@ MESH_LINEWIDTHS = {
     40: 1.4,
     80: 1.35,
     100: 1.5,
+    200: 1.4,
 }
 DATASET_STYLES = {
     "bil": {"color": "#1f77b4", "marker": "o", "linestyle": "-"},
@@ -264,6 +268,7 @@ def _plot_metrics(rows: list[dict], output_dir: Path) -> tuple[Path, Path]:
     fig, error_ax = plt.subplots(figsize=(7.2, 6.4))
     time_ax = error_ax.twinx()
     plot_nodes = sorted({int(row["nodes"]) for row in rows})
+    reference_nodes = max(int(row["reference_nodes"]) for row in rows)
     for dataset in sorted({row["dataset"] for row in rows}):
         subset = sorted((row for row in rows if row["dataset"] == dataset), key=lambda r: r["nodes"])
         nodes = [row["nodes"] for row in subset]
@@ -292,7 +297,7 @@ def _plot_metrics(rows: list[dict], output_dir: Path) -> tuple[Path, Path]:
         )
 
     error_ax.set_xlabel("Nodes per direction")
-    error_ax.set_ylabel("Relative L2 difference to 100 x 100 mesh")
+    error_ax.set_ylabel(f"Relative L2 difference to {reference_nodes} x {reference_nodes} mesh")
     error_ax.set_xscale("log", base=2)
     error_ax.set_yscale("log")
     error_ax.set_xticks(plot_nodes)
