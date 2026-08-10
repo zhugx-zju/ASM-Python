@@ -70,9 +70,9 @@ GRF      5.41e-1     3.40e-1     1.06e-1     2.68e-2     5.70e-3     0
 正问题输出包括：
 
 - `forward_grid_metrics.csv`：网格误差、耗时和内存指标；
-- `forward_edge_profiles.csv`：BIL/EXP/GRF 的边界位移剖面；
+- `forward_edge_profiles.csv`：BIL/EXP/GRF 在右边界 `x = geo_l` 上的 `u_x(y)`、`u_y(y)` 位移剖面；
 - `forward_grid_convergence.{png,pdf}`：双 y 轴网格误差与求解时间图；
-- `forward_edge_bil.{png,pdf}`、`forward_edge_exp.{png,pdf}` 和 `forward_edge_grf.{png,pdf}`：`u_x`、`u_y` 收敛曲线及 inset；
+- `forward_edge_bil.{png,pdf}`、`forward_edge_exp.{png,pdf}` 和 `forward_edge_grf.{png,pdf}`：右边界 `u_x(y)`、`u_y(y)` 收敛曲线及 inset，三种场采用完全相同的绘图结构；
 - 各网格目录下的 `forward_result.pkl` 与 `config.json`：可复核的正问题结果和算例配置。
 
 本阶段尚未执行反演和噪声敏感性分析。后续反演阶段再使用 0%、2%、4%、6%、8%、10% 噪声等级，并在独立流程中评估噪声传播和反演稳定性。

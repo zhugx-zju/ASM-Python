@@ -136,8 +136,12 @@ def _interpolate_field(field: np.ndarray, source_mesh: MeshInfo, target_mesh: Me
     return interpolator(points).reshape(target_mesh.nods_y, target_mesh.nods_x)
 
 
-def _interpolate_edge_profile(field: np.ndarray, mesh_info: MeshInfo, y_values: np.ndarray) -> np.ndarray:
-    """Interpolate a nodal field on the loaded right edge x=L."""
+def _interpolate_right_boundary_profile(
+    field: np.ndarray,
+    mesh_info: MeshInfo,
+    y_values: np.ndarray,
+) -> np.ndarray:
+    """Interpolate a nodal field on the loaded right boundary ``x = L``."""
     y_nodes = np.asarray(mesh_info.plot_y[:, 0], dtype=float)
     edge_values = np.asarray(field, dtype=float)[:, -1]
     return np.interp(y_values, y_nodes, edge_values)
@@ -361,7 +365,7 @@ def _plot_profile_panel(
     for nodes in nodes_list:
         case = cases[nodes]
         profile = (
-            _interpolate_edge_profile(case[component], case["mesh"], y_values)
+            _interpolate_right_boundary_profile(case[component], case["mesh"], y_values)
             * displacement_scale
         )
         profiles.append(profile)
@@ -490,7 +494,7 @@ def _plot_edge_dataset(
     output_dir: Path,
     y_values: np.ndarray,
 ) -> tuple[Path, Path]:
-    """Write one two-panel ux/uy profile figure for a material field."""
+    """Write right-boundary ``u_x(y)``/``u_y(y)`` panels for one field."""
     fig, axes = plt.subplots(1, 2, figsize=(13.2, 5.6), sharex=True)
     panel_specs = (
         ("ux", (0.50, 0.12), "a"),
@@ -663,8 +667,8 @@ def run_forward_grid_study(
                 "peak_python_memory_mb": case["peak_python_memory_mb"],
             })
 
-            ux_profile = _interpolate_edge_profile(case["ux"], case["mesh"], y_values)
-            uy_profile = _interpolate_edge_profile(case["uy"], case["mesh"], y_values)
+            ux_profile = _interpolate_right_boundary_profile(case["ux"], case["mesh"], y_values)
+            uy_profile = _interpolate_right_boundary_profile(case["uy"], case["mesh"], y_values)
             profile_rows.extend(
                 {
                     "dataset": normalized_dataset,
@@ -689,6 +693,7 @@ def run_forward_grid_study(
     manifest["metrics_file"] = str(metrics_path.relative_to(output_dir))
     manifest["figures"] = [str(path.relative_to(output_dir)) for path in figure_paths]
     manifest["edge_profile_file"] = str(edge_profile_csv.relative_to(output_dir))
+    manifest["edge_profile_boundary"] = "right boundary x = geo_l"
     manifest["edge_profile_figures"] = [
         str(path.relative_to(output_dir)) for path in edge_profile_figures
     ]
