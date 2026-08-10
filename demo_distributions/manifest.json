@@ -91,7 +91,7 @@
         "batch_size": 20000,
         "E_max_range": [1.0, 8.0],
         "shuffle_seed": 4,
-        "realization_source": "source_40x40_field_in_latent_gaussian_space"
+        "realization_source": "source_40x40_field_recovered_with_matlab_rbf_covariance"
       },
       "target_file": "true_modulus.npy",
       "noise_percentage": [

@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-from scipy.interpolate import RegularGridInterpolator
 
 from fgm_asm import MaterialInfo, MeshInfo
 
@@ -32,16 +31,21 @@ class DistributionSpec:
     sigma_g: float | None = None
     ell: float | None = None
     jitter: float = 1e-6
+    batch_size: int | None = None
+    shuffle_seed: int | None = None
 
 
-def _interpolate(field: np.ndarray, source_mesh: MeshInfo, target_mesh: MeshInfo) -> np.ndarray:
-    x_source = np.asarray(source_mesh.plot_x[0, :], dtype=float)
-    y_source = np.asarray(source_mesh.plot_y[:, 0], dtype=float)
-    interpolator = RegularGridInterpolator(
-        (y_source, x_source), np.asarray(field, dtype=float), bounds_error=True
+def _rbf_matrix(
+    left_coordinates: np.ndarray,
+    right_coordinates: np.ndarray,
+    ell: float,
+) -> np.ndarray:
+    differences = (
+        np.asarray(left_coordinates, dtype=float)[:, None, :]
+        - np.asarray(right_coordinates, dtype=float)[None, :, :]
     )
-    points = np.column_stack((target_mesh.Y, target_mesh.X))
-    return interpolator(points).reshape(target_mesh.nods_y, target_mesh.nods_x)
+    squared_distance = np.sum(differences * differences, axis=2)
+    return np.exp(-squared_distance / (2.0 * float(ell) ** 2))
 
 
 def _source_mesh(demo_data: dict) -> MeshInfo:
@@ -66,6 +70,8 @@ def _spec_from_metadata(demo_data: dict) -> DistributionSpec:
         sigma_g=parameters.get("sigma_g"),
         ell=parameters.get("ell"),
         jitter=float(parameters.get("jitter", 1e-6)),
+        batch_size=parameters.get("batch_size"),
+        shuffle_seed=parameters.get("shuffle_seed"),
     )
 
 
@@ -97,21 +103,64 @@ def _generate_grf_from_reference(
     mesh: MeshInfo,
     nu: float,
 ) -> tuple[np.ndarray, MaterialInfo]:
-    """Evaluate the selected GRF realization on another structured mesh.
+    """Evaluate one fixed MATLAB-style GRF realization on ``mesh``.
 
-    The original batch generator stores a separate Gaussian vector for each
-    sample and mesh.  Only its 40 x 40 realization is available in this repo,
-    so the realization is transported in latent Gaussian space.  This keeps
-    ``E_max``, ``sigma_g``, ``ell`` and the selected sample fixed while avoiding
-    interpolation of the modulus field itself.  The source mesh reproduces the
-    imported 40 x 40 field exactly up to floating-point roundoff.
+    ``GRF_Generate.m`` forms a Gaussian field with a full RBF covariance
+    matrix, then applies the tanh map.  The compact demo package stores the
+    resulting source field, not the random vector.  The inverse tanh map and
+    source covariance recover an equivalent realization, which is then
+    evaluated on every target mesh with the same RBF coefficients.
     """
     if spec.e_max is None or spec.sigma_g is None or spec.ell is None:
         raise ValueError(f"Missing GRF parameters for {spec.dataset} demo")
+    source_mesh = _source_mesh(demo_data)
     reference = np.asarray(demo_data["E_field"], dtype=float)
-    normalized = np.clip(2.0 * reference / float(spec.e_max) - 1.0, -1.0 + 1e-12, 1.0 - 1e-12)
-    latent = np.arctanh(normalized) / float(spec.sigma_g)
-    latent_target = _interpolate(latent, _source_mesh(demo_data), mesh)
+    normalized = np.clip(
+        2.0 * reference / float(spec.e_max) - 1.0,
+        -1.0 + 1e-12,
+        1.0 - 1e-12,
+    )
+    latent_source = np.arctanh(normalized) / float(spec.sigma_g)
+
+    realization = demo_data.get("_grf_realization")
+    if realization is None:
+        source_coordinates = np.asarray(source_mesh.coord, dtype=float)
+        covariance = _rbf_matrix(source_coordinates, source_coordinates, spec.ell)
+        covariance.flat[:: covariance.shape[0] + 1] += float(spec.jitter)
+        latent_vector = latent_source.ravel(order="C")
+        cholesky = np.linalg.cholesky(covariance)
+        random_vector = np.linalg.solve(cholesky, latent_vector)
+        rbf_weights = np.linalg.solve(covariance, latent_vector)
+        realization = {
+            "source_coordinates": source_coordinates,
+            "latent_source": latent_source,
+            "random_vector": random_vector,
+            "rbf_weights": rbf_weights,
+        }
+        demo_data["_grf_realization"] = realization
+
+    # Preserve the imported MATLAB field exactly at its source resolution.
+    if (
+        mesh.nods_x == source_mesh.nods_x
+        and mesh.nods_y == source_mesh.nods_y
+        and np.allclose(mesh.coord, source_mesh.coord)
+    ):
+        return reference.copy(), MaterialInfo(nu=nu, dis_type="grf")
+
+    target_coordinates = np.asarray(mesh.coord, dtype=float)
+    latent_target = np.empty(target_coordinates.shape[0], dtype=float)
+    source_coordinates = realization["source_coordinates"]
+    rbf_weights = realization["rbf_weights"]
+    chunk_size = 2048
+    for start in range(0, target_coordinates.shape[0], chunk_size):
+        stop = min(start + chunk_size, target_coordinates.shape[0])
+        kernel = _rbf_matrix(
+            target_coordinates[start:stop],
+            source_coordinates,
+            spec.ell,
+        )
+        latent_target[start:stop] = kernel @ rbf_weights
+    latent_target = latent_target.reshape(mesh.nods_y, mesh.nods_x, order="C")
     field = float(spec.e_max) * (
         np.tanh(float(spec.sigma_g) * latent_target) + 1.0
     ) / 2.0

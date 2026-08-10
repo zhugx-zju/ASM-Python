@@ -18,7 +18,7 @@ import config as cfg
 
 DATASETS = DEFAULT_DATASETS
 NODES = DEFAULT_NODES
-OUTPUT_DIR = REPO_ROOT / "results" / "grid_study" / "forward"
+OUTPUT_DIR = REPO_ROOT / "results" / "grid_study" / "forward_demo"
 
 run_forward_grid_study(
     forward_config=cfg.get_forward_config(),

@@ -527,7 +527,7 @@ def run_forward_grid_study(
     forward_config: ForwardConfig,
     datasets: tuple[str, ...] = DEFAULT_DATASETS,
     nodes_list: tuple[int, ...] = DEFAULT_NODES,
-    output_dir: Path | str = "results/grid_study/forward",
+    output_dir: Path | str = "results/grid_study/forward_demo",
     demo_root: Path | str | None = DEFAULT_DEMO_ROOT,
 ) -> Path:
     output_dir = Path(output_dir)

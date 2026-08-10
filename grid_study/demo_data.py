@@ -150,9 +150,10 @@ def generate_demo_case(
 
     This is the production path for grid studies. It does not interpolate the
     imported modulus field for BIL/EXP; those cases are evaluated from their
-    stored distribution coefficients. GRF transports the stored realization
-    in latent Gaussian space because the original per-sample random vectors
-    are not included in the compact demo package.
+    stored distribution coefficients. GRF recovers an equivalent latent
+    realization from the stored 40 x 40 field and evaluates its MATLAB-style
+    RBF representation on each target mesh because the original per-sample
+    random vector is not included in the compact demo package.
     """
     E_field, material_info = generate_demo_modulus(
         demo_data,

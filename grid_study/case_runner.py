@@ -143,6 +143,12 @@ def run_forward_case(
         case_config["sample_index"] = int(spec["sample_index"])
         case_config["source_sample_index"] = int(spec["source_sample_index"])
         case_config["distribution_parameters"] = spec["parameters"]
+        if str(spec.get("dataset", "")).strip().lower() == "grf":
+            parameters = spec["parameters"]
+            case_config["grf_E_max"] = parameters.get("E_max")
+            case_config["grf_sigma_g"] = parameters.get("sigma_g")
+            case_config["grf_ell"] = parameters.get("ell")
+            case_config["grf_seed"] = parameters.get("shuffle_seed")
     return {
         "dataset": dis_type,
         "nodes": int(nodes),
