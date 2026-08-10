@@ -60,7 +60,7 @@ The main defaults are defined in `config.py`, which now returns typed configurat
 - Poisson ratio: `0.3`
 - modulus targets: `Ex = 2.0`, `Ey = 0.5`
 - distribution type: `bil`
-- GRF defaults (used when `DIS_TYPE = 'grf'`): `E_max = 8.0`, `sigma_g = 1.0`, `ell = 1.0`, `seed = 42`
+- GRF defaults (used when `DIS_TYPE = 'grf'`): `E_max = 8.0`, `sigma_g = 1.0`, `ell = 25.0 mm`, `seed = 42`
 - default regularization parameter: `1e-6`
 
 ## Typical Workflow
