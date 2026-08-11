@@ -3,6 +3,9 @@
 The main experiment keeps the regularization parameter fixed so that mesh
 effects are measured independently from regularization-parameter selection.
 Each case is saved separately and can be resumed after an interrupted run.
+
+Extensions support loading gamma values from a selection file, allowing
+different gamma values for each noise level.
 """
 
 from __future__ import annotations
@@ -19,8 +22,9 @@ from matplotlib.ticker import LogFormatterMathtext, LogLocator
 
 from fgm_asm.config_types import ForwardConfig, InverseConfig
 from fgm_asm.results_io import save_inverse_results
-from grid_study.case_runner import make_grf_reference, run_forward_case, run_inverse_case
+from grid_study.case_runner import run_forward_case, run_inverse_case
 from grid_study.demo_data import DEFAULT_DEMO_ROOT, load_demo_dataset
+from grid_study.gamma_selection import load_gamma_by_noise
 from grid_study.plot_style import style_axes as _style_axes
 from grid_study.study_io import load_forward_case, save_forward_case, write_csv_rows
 from grid_study.study_metrics import inverse_metrics
@@ -163,14 +167,15 @@ def run_inverse_grid_study(
     reference_nodes = int(reference_nodes)
     if reference_nodes not in nodes_list:
         raise ValueError("reference_nodes must be included in nodes_list")
-    gamma = float(gamma)
+    if isinstance(gamma, dict):
+        gamma_by_noise = {float(level): float(value) for level, value in gamma.items()}
+        missing = [level for level in noise_percentage if level not in gamma_by_noise]
+        if missing:
+            raise ValueError(f"gamma mapping is missing noise levels: {missing}")
+    else:
+        gamma_by_noise = {level: float(gamma) for level in noise_percentage}
     max_iter = int(inverse_config.max_iter if max_iter is None else max_iter)
 
-    grf_reference = (
-        make_grf_reference(forward_config, GRF_REFERENCE_NODES)
-        if demo_root is None
-        else None
-    )
     rows = []
     manifest = {
         "study": "asm_inverse_grid_convergence_fixed_gamma",
@@ -178,7 +183,7 @@ def run_inverse_grid_study(
         "nodes": list(nodes_list),
         "reference_nodes": reference_nodes,
         "noise_percentage": list(noise_percentage),
-        "gamma": gamma,
+        "gamma_by_noise": gamma_by_noise,
         "gamma_selection_method": "user_selected_reference_grid",
         "max_iter": max_iter,
         "noise_seed": NOISE_SEED,
@@ -204,7 +209,6 @@ def run_inverse_grid_study(
                     normalized,
                     nodes,
                     forward_config=forward_config,
-                    grf_reference=grf_reference if normalized == "grf" else None,
                     demo_data=demo_data,
                 )
                 save_forward_case(case, forward_path)
@@ -215,7 +219,7 @@ def run_inverse_grid_study(
                         "dataset": normalized,
                         "nodes": nodes,
                         "elements": nodes - 1,
-                        "gamma": gamma,
+                        "gamma_by_noise": gamma_by_noise,
                         "max_iter": max_iter,
                         "noise_percentage": list(noise_percentage),
                         "noise_seed": NOISE_SEED,
@@ -227,6 +231,7 @@ def run_inverse_grid_study(
                 encoding="utf-8",
             )
             for noise in noise_percentage:
+                noise_gamma = gamma_by_noise[noise]
                 noise_dir = case_dir / f"noise_{noise:g}"
                 noise_dir.mkdir(parents=True, exist_ok=True)
                 (noise_dir / "config.json").write_text(
@@ -239,7 +244,7 @@ def run_inverse_grid_study(
                             "noise_level_fraction": noise / 100.0,
                             "noise_seed": NOISE_SEED,
                             "data_source": manifest["data_source"],
-                            "gamma": gamma,
+                            "gamma": noise_gamma,
                             "reference_nodes": reference_nodes,
                             "forward_config": case["config"],
                         },
@@ -259,12 +264,12 @@ def run_inverse_grid_study(
                     result, U_measured, inverse_elapsed, peak_memory_mb = run_inverse_case(
                         case,
                         noise,
-                        gamma,
+                        noise_gamma,
                         inverse_config,
                         max_iter=max_iter,
                     )
                     errors = inverse_metrics(
-                        case, result, U_measured, noise, gamma, inverse_elapsed, peak_memory_mb
+                        case, result, U_measured, noise, noise_gamma, inverse_elapsed, peak_memory_mb
                     )
                     save_inverse_results(
                         result,
@@ -286,7 +291,7 @@ def run_inverse_grid_study(
                         },
                     )
                 row = inverse_metrics(
-                    case, result, U_measured, noise, gamma, inverse_elapsed, peak_memory_mb
+                    case, result, U_measured, noise, noise_gamma, inverse_elapsed, peak_memory_mb
                 )
                 rows.append(row)
                 manifest["cases"].append({
@@ -322,11 +327,17 @@ def main() -> None:
         default=list(DEFAULT_NOISE_PERCENTAGE),
     )
     parser.add_argument("--output-dir", type=Path, default=Path("results/grid_study/inverse"))
-    parser.add_argument(
+    gamma_group = parser.add_mutually_exclusive_group(required=True)
+    gamma_group.add_argument(
         "--gamma",
         type=float,
-        required=True,
-        help="Fixed gamma selected beforehand on the reference grid",
+        help="Single fixed gamma applied to every noise level",
+    )
+    gamma_group.add_argument(
+        "--gamma-file",
+        type=Path,
+        help="Path to a gamma_selection_*.json file produced by grid_study.gamma_selection, "
+        "supplying one gamma per noise level",
     )
     parser.add_argument(
         "--reference-nodes",
@@ -345,6 +356,9 @@ def main() -> None:
     args = parser.parse_args()
     forward_config = cfg.get_forward_config()
     inverse_config = cfg.get_inverse_config()
+    gamma = args.gamma
+    if args.gamma_file is not None:
+        gamma = load_gamma_by_noise(args.gamma_file)
     run_inverse_grid_study(
         forward_config=forward_config,
         inverse_config=inverse_config,
@@ -352,7 +366,7 @@ def main() -> None:
         nodes_list=tuple(args.nodes),
         noise_percentage=tuple(args.noise_percentage),
         output_dir=args.output_dir,
-        gamma=args.gamma,
+        gamma=gamma,
         reference_nodes=args.reference_nodes,
         max_iter=args.max_iter,
         resume=args.resume,

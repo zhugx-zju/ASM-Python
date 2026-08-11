@@ -14,7 +14,7 @@ import config as cfg
 # This path uses EX and EY from config.py for BIL/EXP and the GRF settings
 # from the same forward configuration.
 DATASETS = ("bil", "exp", "grf")
-NODES = (4, 10, 20, 30, 40, 60, 80, 100, 200)
+NODES = (4, 10, 20, 40, 80, 100, 200)
 OUTPUT_DIR = REPO_ROOT / "results" / "grid_study" / "forward_original"
 
 run_forward_grid_study(

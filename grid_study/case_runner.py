@@ -65,33 +65,10 @@ def measure_case(func, repeats: int = 5):
     return value, float(np.median(timings)), float(peak_bytes / 1024**2)
 
 
-def make_grf_reference(forward_config: ForwardConfig, nodes: int) -> dict:
-    """Generate a reproducible GRF reference using an explicit configuration."""
-    mesh = MeshInfo(
-        forward_config.geo_l,
-        forward_config.geo_h,
-        int(nodes) - 1,
-        int(nodes) - 1,
-    )
-    E_field, _ = generate_fgm_modulus(
-        mesh,
-        dis_type="grf",
-        Ex=forward_config.Ex,
-        Ey=forward_config.Ey,
-        nu=forward_config.nu,
-        grf_E_max=forward_config.grf_E_max,
-        grf_sigma_g=forward_config.grf_sigma_g,
-        grf_ell=forward_config.grf_ell,
-        grf_seed=forward_config.grf_seed,
-    )
-    return {"mesh": mesh, "E_field": E_field}
-
-
 def run_forward_case(
     dis_type: str,
     nodes: int,
     forward_config: ForwardConfig,
-    grf_reference: dict | None = None,
     demo_data: dict | None = None,
 ) -> dict:
     """Run one measured forward case with an explicit forward configuration."""
@@ -110,9 +87,14 @@ def run_forward_case(
             demo_case = generate_demo_case(demo_data, mesh, forward_config)
             E_field = demo_case["E_field"]
             material_info = demo_case["material_info"]
-        elif dis_type == "grf" and grf_reference is not None:
-            material_info = MaterialInfo(nu=forward_config.nu, dis_type="grf")
-            E_field = interpolate_field(grf_reference["E_field"], grf_reference["mesh"], mesh)
+        elif dis_type == "grf":
+            raise ValueError(
+                "GRF cases require demo_data with a fixed realization. "
+                "The demo_root=None path (parameter-only driven generation) "
+                "is unsupported for GRF because different mesh sizes produce "
+                "unrelated random-field realizations even with the same seed. "
+                "Use demo_root to load a fixed GRF sample from demo_distributions/."
+            )
         else:
             E_field, material_info = generate_fgm_modulus(
                 mesh,
@@ -209,7 +191,6 @@ def run_inverse_case(
 __all__ = [
     "field_from_displacement",
     "interpolate_field",
-    "make_grf_reference",
     "measure_case",
     "run_forward_case",
     "run_inverse_case",

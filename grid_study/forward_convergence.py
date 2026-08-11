@@ -36,7 +36,6 @@ from grid_study.demo_data import DEFAULT_DEMO_ROOT, load_demo_dataset
 from grid_study.distributions import validate_demo_modulus
 from grid_study.case_runner import (
     interpolate_field as _interpolate_field,
-    make_grf_reference,
     run_forward_case,
 )
 from grid_study.plot_style import (
@@ -563,15 +562,11 @@ def run_forward_grid_study(
                     f"40x40 reference field: max difference={validation['max_absolute_difference']:.3e}"
                 )
             manifest["demo_validation"].append(validation)
-        grf_reference = None
-        if normalized == "grf" and demo_data is None:
-            grf_reference = make_grf_reference(forward_config, reference_nodes)
         for nodes in nodes_list:
             case = run_forward_case(
                 normalized,
                 nodes,
                 forward_config=forward_config,
-                grf_reference=grf_reference,
                 demo_data=demo_data,
             )
             raw_cases[normalized][nodes] = case
