@@ -132,8 +132,8 @@ def lbfgs_inverse_solver_scipy(mesh_info, bc_info, U_measured, E_init=None,
         U_measured: Measured displacement data [n_dof]
         E_init: Initial modulus guess [n_nod]
         gamma: Regularization coefficient
-        E_min: Minimum modulus for initialization (only used if E_init is None)
-        E_max: Maximum modulus (kept for compatibility)
+        E_min: Strictly positive minimum modulus bound
+        E_max: Maximum modulus bound, which must be greater than E_min
         max_iter: Maximum iterations
         ftol: Function tolerance
         gtol: Gradient tolerance in m space
@@ -142,8 +142,18 @@ def lbfgs_inverse_solver_scipy(mesh_info, bc_info, U_measured, E_init=None,
     Returns:
         results: Dictionary containing optimization results and cached final state
     """
-    del E_max
     from .material import MaterialInfo
+
+    E_min = float(E_min)
+    E_max = float(E_max)
+    if not np.isfinite(E_min) or not np.isfinite(E_max):
+        raise ValueError("E_min and E_max must be finite")
+    if E_min <= 0.0:
+        raise ValueError(f"E_min must be strictly positive in log space, got {E_min}")
+    if E_max <= E_min:
+        raise ValueError(
+            f"E_max must be greater than E_min, got E_min={E_min}, E_max={E_max}"
+        )
 
     if mesh_info.M is None:
         mesh_info.assemble_mass_matrix()
@@ -153,12 +163,24 @@ def lbfgs_inverse_solver_scipy(mesh_info, bc_info, U_measured, E_init=None,
         E_vec0 = E_min + 0.5 * np.ones(mesh_info.n_nod)
     else:
         E_vec0 = np.asarray(E_init, dtype=float).copy()
+        if E_vec0.shape != (mesh_info.n_nod,):
+            raise ValueError(
+                f"E_init must have shape ({mesh_info.n_nod},), got {E_vec0.shape}"
+            )
+        if not np.all(np.isfinite(E_vec0)):
+            raise ValueError("E_init must contain only finite values")
+
+    E_vec0 = np.clip(E_vec0, E_min, E_max)
 
     m_vec0 = np.log(E_vec0)
+    m_min = float(np.log(E_min))
+    m_max = float(np.log(E_max))
+    modulus_bounds = [(m_min, m_max)] * mesh_info.n_nod
     material_info = MaterialInfo(nu=nu)
 
     print("Starting L-BFGS-B optimization in m = ln(E) space...")
     print(f"  Initial modulus: min={E_vec0.min():.4f}, max={E_vec0.max():.4f}, mean={E_vec0.mean():.4f}")
+    print(f"  Modulus bounds: [{E_min:.4g}, {E_max:.4g}]")
     print(f"  Max iterations: {max_iter}, ftol: {ftol:.2e}, gtol: {gtol:.2e}")
 
     evaluation_counter = [0]
@@ -224,6 +246,7 @@ def lbfgs_inverse_solver_scipy(mesh_info, bc_info, U_measured, E_init=None,
         x0=m_vec0,
         method='L-BFGS-B',
         jac=True,
+        bounds=modulus_bounds,
         options={
             'maxiter': max_iter,
             'ftol': ftol,
@@ -271,4 +294,6 @@ def lbfgs_inverse_solver_scipy(mesh_info, bc_info, U_measured, E_init=None,
         'final_gradient': final_state['grad_m'],
         'final_grad_tar': final_state['grad_tar_m'],
         'final_grad_reg': final_state['grad_reg_m'],
+        'E_min_bound': E_min,
+        'E_max_bound': E_max,
     }

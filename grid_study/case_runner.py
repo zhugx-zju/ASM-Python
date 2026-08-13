@@ -1,4 +1,4 @@
-"""Shared numerical case runners for forward and inverse grid studies."""
+"""Shared numerical case runners for forward grid studies."""
 
 from __future__ import annotations
 
@@ -9,15 +9,12 @@ import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 
 from fgm_asm import (
-    MaterialInfo,
     MeshInfo,
-    add_noise_to_displacement,
     fem_assemble,
     forward_solver,
     generate_fgm_modulus,
-    lbfgs_inverse_solver_scipy,
 )
-from fgm_asm.config_types import ForwardConfig, InverseConfig
+from fgm_asm.config_types import ForwardConfig
 from fgm_asm.mesh import setup_boundary_conditions
 from grid_study.demo_data import generate_demo_case
 
@@ -147,51 +144,9 @@ def run_forward_case(
     }
 
 
-def run_inverse_case(
-    case: dict,
-    noise_percentage: float,
-    gamma: float,
-    inverse_config: InverseConfig,
-    max_iter: int | None = None,
-    U_measured: np.ndarray | None = None,
-) -> tuple[dict, np.ndarray, float, float]:
-    """Run one inverse case using an explicit inverse configuration."""
-    mesh = case["mesh"]
-    if mesh.M is None:
-        mesh.assemble_mass_matrix()
-    noise_level = float(noise_percentage) / 100.0
-    if U_measured is None:
-        U_measured = add_noise_to_displacement(case["U"], noise_level, seed=42)
-    else:
-        U_measured = np.asarray(U_measured, dtype=float)
-
-    solve_max_iter = inverse_config.max_iter if max_iter is None else int(max_iter)
-    tracemalloc.start()
-    start = time.perf_counter()
-    try:
-        result = lbfgs_inverse_solver_scipy(
-            mesh_info=mesh,
-            bc_info=case["bc_info"],
-            U_measured=U_measured,
-            E_init=None,
-            gamma=gamma,
-            E_min=inverse_config.E_min,
-            E_max=inverse_config.E_max,
-            max_iter=solve_max_iter,
-            ftol=inverse_config.ftol,
-            gtol=inverse_config.gtol,
-            nu=inverse_config.nu,
-        )
-    finally:
-        _, peak_bytes = tracemalloc.get_traced_memory()
-        tracemalloc.stop()
-    return result, U_measured, float(time.perf_counter() - start), float(peak_bytes / 1024**2)
-
-
 __all__ = [
     "field_from_displacement",
     "interpolate_field",
     "measure_case",
     "run_forward_case",
-    "run_inverse_case",
 ]

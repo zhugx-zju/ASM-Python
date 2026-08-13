@@ -155,7 +155,13 @@ write and search the same root-level case folders even when launched with
 | `script/plot_lcurve.py` | Reloads saved L-curve data and exports the L-curve and curvature figures. |
 | `grid_study/demo_data.py` | Loads demo data and source-generation metadata; exposes parameter-driven mesh generation and reference-data validation. |
 | `grid_study/distributions.py` | Generates selected BIL/EXP fields from `alpha/beta` and selected GRF fields from stored GRF parameters. |
-| `grid_study/inverse_convergence.py` | Runs a resumable fixed-gamma inverse mesh/noise study after gamma is selected on an explicit reference grid. |
+| `script/run_demo_inverse.py` | Editable manual-case entry point for one or more independent demo inverse cases. It contains case definitions only and delegates computation, saving, and plotting to `fgm_asm.demo_inverse`. |
+| `fgm_asm/demo_inverse.py` | Runs one repository-local demo distribution, mesh density, and noise level as a self-contained inverse case. |
+| `fgm_asm/demo_case_results.py` | Saves each demo inverse case's numerical data, metadata, L-curve data, and PNG/PDF figures. |
+| `fgm_asm/case_paths.py` | Defines the stable `inverse_demo/<dataset>/nodes_NxN/noise_P` result layout. |
+| `grid_study/result_collection.py` | Reads completed independent cases and writes a comparison-ready summary CSV without running a solver. |
+| `grid_study/inverse_grid_plots.py` | Creates publication-style inverse mesh-error, solve-time, and memory figures from completed metrics without rerunning inverse cases. |
+| `script/plot_demo_inverse_grid.py` | Plot-only entry point for the completed BIL inverse mesh study; includes 10, 20, 40, 80, 100, and 200 nodes per direction. |
 | `docs/branch_scope.md` | Lightweight branch-management note describing the role of `main`, `disp_linear`, and `disp_nonlinear`. |
 | `docs/validation.md` | Lightweight validation checklist and record template for each research branch. |
 
@@ -235,16 +241,49 @@ The original runner sets `demo_root=None`, so BIL and EXP fields are evaluated
 from the `EX` and `EY` values on every target mesh, while the GRF field is
 generated from the configured GRF parameters without loading demo data.
 
-The inverse grid study also uses the repository copy by default. For every
+The demo inverse workflow also uses the repository copy by default. For every
 target mesh it solves the forward problem for the parameter-generated true
-field and creates that mesh's requested noise level from the clean
+field and creates that case's requested noise level from the clean
 displacement. The imported displacement files remain reference data for the
-40 x 40 demo case. It still requires an explicit `--reference-nodes` and a
-gamma selected beforehand on that reference grid:
+40 x 40 demo case.
 
-```bash
-python -m grid_study.inverse_convergence --reference-nodes 40 --gamma 1e-6
+To run independently reproducible demo inverse cases, edit `CASES` in
+`script/run_demo_inverse.py` and run that file directly. Each dictionary represents
+exactly one distribution, mesh density, and noise level. The script contains
+no solver implementation or `main()` function; it calls the reusable workflow
+in `fgm_asm.demo_inverse`.
+
+Case results are self-contained under:
+
+```text
+results/grid_study/inverse_demo/<dataset>/nodes_<NxN>/noise_<percentage>/
 ```
+
+Each completed case stores its configuration, metadata, measured
+displacement, compact ASM arrays, full pickle result, scalar metrics, and all
+applicable reconstruction, error, displacement, iteration, gradient, L-curve,
+and curvature figures in both PNG and PDF formats. The workflow only reads the
+repository-local `demo_distributions/` package and has no dependency on the
+parent U-Net project.
+
+New inverse cases use `nodes_<NxM>` directories. Result collection also reads
+legacy square-mesh directories named `nodes_<N>` and normalizes them to
+`nodesx=N, nodesy=N`; if both layouts contain the same case, the current
+`nodes_<NxM>` result takes precedence. The L-BFGS-B inverse solver applies the
+configured `E_min` and `E_max` as bounds in logarithmic modulus space.
+
+Previously validated BIL regularization coefficients are retained under
+`demo_distributions/bil/sample_600/regularization_reference/`, with one JSON
+file per mesh density. These values are references for selecting a fixed gamma
+or narrowing an L-curve range; each file also records the source noise level,
+scan status, and validation results, so a non-converged scan is not presented
+as an unconditional recommendation.
+
+Existing BIL mesh-study metrics can be plotted without running an inverse
+solver by directly executing `script/plot_demo_inverse_grid.py`. The summary figures
+are written to `results/grid_study/inverse_demo/summary/` in both PNG and PDF
+formats. Hollow markers identify cases that reached the configured iteration
+limit.
 
 ## Inverse Problem Options
 

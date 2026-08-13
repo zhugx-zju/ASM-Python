@@ -1,0 +1,53 @@
+{
+  "nodes": 4,
+  "seed_noise": 4.0,
+  "seed_gamma": 9.540954763499925e-10,
+  "seed_lcurve_time_seconds": 30.808802604675293,
+  "seed_lcurve_peak_memory_mb": 1.4991607666015625,
+  "seed_scan_converged": true,
+  "quality_threshold": 0.4,
+  "reuse_log": [
+    {
+      "noise_percentage": 0.0,
+      "gamma_source": "seed_reuse",
+      "gamma_used": 9.540954763499925e-10,
+      "relative_l2_E": 0.007972560329557595,
+      "converged": true
+    },
+    {
+      "noise_percentage": 2.0,
+      "gamma_source": "seed_reuse",
+      "gamma_used": 9.540954763499925e-10,
+      "relative_l2_E": 0.16489015288079695,
+      "converged": true
+    },
+    {
+      "noise_percentage": 4.0,
+      "gamma_source": "seed_reuse",
+      "gamma_used": 9.540954763499925e-10,
+      "relative_l2_E": 0.3641095847811261,
+      "converged": true
+    },
+    {
+      "noise_percentage": 6.0,
+      "gamma_source": "individual_rescan",
+      "gamma_used": 1.2067926406393264e-10,
+      "relative_l2_E": 1.0592409159197527,
+      "converged": true
+    },
+    {
+      "noise_percentage": 8.0,
+      "gamma_source": "individual_rescan",
+      "gamma_used": 1.9306977288832535e-10,
+      "relative_l2_E": 1.219188925206636,
+      "converged": true
+    },
+    {
+      "noise_percentage": 10.0,
+      "gamma_source": "individual_rescan",
+      "gamma_used": 1.3257113655901109e-10,
+      "relative_l2_E": 1.1977275452551417,
+      "converged": true
+    }
+  ]
+}

@@ -24,6 +24,7 @@
     }
   },
   "target_file": "true_modulus.npy",
+  "regularization_reference_dir": "regularization_reference",
   "noise_percentage": [
     0.0,
     2.0,
